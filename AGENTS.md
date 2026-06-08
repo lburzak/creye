@@ -1,0 +1,1 @@
+- You MUST comply to `pdr/accepted/PDR-000-project-decision-records.md`
