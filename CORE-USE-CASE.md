@@ -10,8 +10,9 @@
     - **Symbols** (functions, properties, etc.)
 - Let the viewer collapse and expand nodes to move between levels — e.g., collapse a module to hide its packages and files, or expand a class to reveal its individual symbols.
 - When a node is collapsed, its children's dependencies aggregate onto the collapsed parent, so relationships remain visible at every level.
-- Visualize each changed symbol's dependencies in three directions:
-    - **Outbound** — how the changed symbols connect to the rest of the existing codebase.
-    - **Inbound** — what external code the changed symbols rely on.
-    - **Internal** — dependencies among the changed symbols themselves, including relationships that span the different changed files.
+- Resolve what the changed code depends on at the level of the changed lines and declarations, not whole changed files.
+- Visualize each changed symbol's dependencies, classified by where the target lives:
+    - **Internal** — unchanged symbols in the same project that the changed code depends on.
+    - **External** — symbols in libraries or the JDK that the changed code depends on.
+    - **Cohesion** — dependencies among the changed symbols themselves, including relationships that span the different changed files.
 - Draw the graph inside an IntelliJ plugin editor panel.

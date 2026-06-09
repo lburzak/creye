@@ -11,7 +11,3 @@
 3. The graph model MUST represent changed, related, unresolved, and structural nodes where needed.
 4. Dependency edges MUST include direction and classification metadata.
 5. Diagnostics MUST be attachable to the graph, nodes, or edges where applicable.
-## Decision
-- TBD through targeted discussion.
-## Rationale
-- TBD through targeted discussion.

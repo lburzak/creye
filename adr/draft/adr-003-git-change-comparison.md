@@ -11,7 +11,3 @@
 3. The implementation MUST include uncommitted working directory changes in the comparison.
 4. The implementation MUST identify changed Kotlin files before symbol extraction starts.
 5. The implementation MUST expose diagnostics for missing branches, non-git projects, unsupported file states, and diff failures.
-## Decision
-- TBD through targeted discussion.
-## Rationale
-- TBD through targeted discussion.

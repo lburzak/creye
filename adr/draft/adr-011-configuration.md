@@ -11,7 +11,3 @@
 3. The implementation MUST validate that the configured branch exists.
 4. The implementation MUST stop analysis when branch configuration is missing or invalid.
 5. The implementation SHOULD avoid broad configuration surfaces not required by the MVP.
-## Decision
-- TBD through targeted discussion.
-## Rationale
-- TBD through targeted discussion.

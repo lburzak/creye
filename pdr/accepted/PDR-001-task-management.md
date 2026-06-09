@@ -1,5 +1,10 @@
 # PDR-001 Task Management
 
+## Problem & Context
+- AI-assisted project planning and management is inconsistent
+- Goal-orientation is not enforced
+- Incremental progress is not enforced
+
 ## Decision
 ### Workflow
 #### Workload decomposition
@@ -34,8 +39,8 @@
 - Priority on reusing in-progress tasks/milestones
 ### Directory structure - Markdown
 - `campaigns`
-	- `{{campaign-slug}}
-		- `CAMPAIGN.md
+	- `{{campaign-slug}}`
+		- `CAMPAIGN.md`
 		- `milestones`
 			- `{{milestone-slug}}`
 				- `MILESTONE.md`
@@ -48,9 +53,9 @@
 - `## Checklist`
 	- MUST be plaint points checkbox list
 	- MUST be composed on-demand
-#### MILESTONE.toml
+#### MILESTONE.md
 - `## Definition of Ready`, `## Definition of Done`
-	- MUST list set of imperatives (RFC 2119) that determine task completion
+	- MUST list set of imperatives (RFC 2119) that determine milestone achievement
 - `## Tasks`
 	- MUST map task slug to its role within milestone achievement
 #### Resources

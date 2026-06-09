@@ -11,7 +11,3 @@
 3. The renderer MUST support collapse and expand interactions for hierarchical nodes.
 4. The renderer MUST preserve visibility of aggregated dependency edges.
 5. The renderer SHOULD expose diagnostics in a way that supports MVP validation.
-## Decision
-- TBD through targeted discussion.
-## Rationale
-- TBD through targeted discussion.

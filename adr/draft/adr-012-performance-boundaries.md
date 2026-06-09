@@ -11,7 +11,3 @@
 3. The implementation SHOULD prioritize changed Kotlin files and changed symbols over whole-project exhaustive analysis.
 4. The implementation MUST expose diagnostics when analysis is skipped, cancelled, truncated, or bounded.
 5. The renderer MUST remain usable with partial graph results.
-## Decision
-- TBD through targeted discussion.
-## Rationale
-- TBD through targeted discussion.

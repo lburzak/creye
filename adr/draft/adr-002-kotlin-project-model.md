@@ -11,7 +11,3 @@
 3. The implementation MUST represent module, package, file, class, function, and property hierarchy where available.
 4. The implementation MUST tolerate unresolved or partially indexed project states.
 5. The implementation MUST expose diagnostics when ownership of a file or symbol cannot be determined.
-## Decision
-- TBD through targeted discussion.
-## Rationale
-- TBD through targeted discussion.

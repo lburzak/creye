@@ -15,13 +15,19 @@ Project Decision Record (PDR)
 - Title
   - MUST be Title Case
   - MUST be short
-  - MUST describe problem, workflow, or procedure, not implementation detail
   - MUST be declarative
-  - Examples
+  - MUST name the problem domain the record decides — the question or topic under decision — not the chosen answer, mechanism, or implementation detail
+    - Test: the title states *what is being decided*, not *what was decided*. A broad topic noun (e.g. `Configuration`, `Persistence`) is correct because it names the decision area; the body holds the answer
+  - Examples (name the problem domain — correct)
     - Release Procedure
     - Sprint Planning
     - Code Review Workflow
     - AI Assisted Development Context
+    - Configuration
+  - Counter-examples (name the chosen answer — wrong)
+    - `GitHub Actions Release` instead of `Release Procedure`
+    - `Two-Week Sprints` instead of `Sprint Planning`
+    - `TOML Config File` instead of `Configuration`
 
 - Status
   - MUST be either of: Draft, Accepted, Rejected, Deprecated
@@ -31,7 +37,7 @@ Project Decision Record (PDR)
   - MUST be Deprecated when it was previously Accepted but is no longer considered practical, beneficial, feasible, or optimal, or when it is superseded by another PDR
 
 - Document
-  - Name MUST match format `pdr-{{id}}-{{title}}.md`
+  - Name MUST match format `PDR-{{id}}-{{title}}.md`
     - Name MUST be kebab-case
   - Path MUST be a subdirectory of `pdr` indicating its status e.g. `pdr/accepted`
     - MUST be Markdown
@@ -42,13 +48,17 @@ Project Decision Record (PDR)
       - MUST be a bullet point list for clarity
       - MUST describe a workflow, procedure, coordination, or project operating problem that needs to be resolved by the PDR and the context in which it surfaced
     - **Constraints** section
+      - MUST be minimal
+      - MUST be omitted if no relevant constraints exist
       - MUST be a numbered list for easy referencing
       - MUST be in RFC 2119 format
       - Any deliberation between alternate decision and the actual decision rationale MUST be grounded in it and clearly refer to it
     - **Decision** section
       - MUST list rules that must be followed to comply with the decision
-      - Rule MUST be written in imperatives like RFC 2119
+      - SHOULD feature clear imperatives like RFC 2119
+      - MAY be omitted, if status is **Draft**
     - **Rationale** section
+      - MAY be omitted, if status is **Draft**
     - **Rejection reason** section, if status is **Rejected**
   - MAY contain **Notes** section
   - MUST NOT contain **Status** as it is inferred from document path

@@ -1,4 +1,4 @@
-# ADR-003 Bug Tracking
+# PDR-003 Bug Tracking
 
 ## Problem & Context
 - Fixing bugs immediately during implementation
@@ -21,7 +21,7 @@
 			- MUST NOT be present if uncernain
 		- `encountered-in-commit`
 			- MUST NOT be present when `introduced-in-commit` is present
-		- `indroduced-in-commit`
+		- `introduced-in-commit`
 			- MUST be commit hash
 			- MUST be determined on-demand
 			- MAY be resolved by `git bisect`

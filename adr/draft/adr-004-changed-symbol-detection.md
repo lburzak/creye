@@ -11,7 +11,3 @@
 3. The implementation MUST preserve file-level change information when declaration-level mapping is ambiguous.
 4. The implementation MUST distinguish changed declarations from related contextual declarations where feasible.
 5. The implementation MUST expose diagnostics for changed hunks that cannot be mapped to declarations.
-## Decision
-- TBD through targeted discussion.
-## Rationale
-- TBD through targeted discussion.

@@ -8,10 +8,6 @@
 ## Constraints
 1. The implementation MUST preserve visibility of dependencies when nodes are collapsed by aggregating child edges onto visible ancestors.
 2. Aggregation MUST preserve dependency direction.
-3. Aggregation MUST preserve inbound, outbound, and internal classification where feasible.
+3. Aggregation MUST preserve internal, external, and cohesion classification where feasible.
 4. Aggregation MUST avoid rendering duplicate equivalent visible edges.
 5. Aggregation SHOULD retain traceability to the underlying hidden edges for diagnostics or drill-down.
-## Decision
-- TBD through targeted discussion.
-## Rationale
-- TBD through targeted discussion.

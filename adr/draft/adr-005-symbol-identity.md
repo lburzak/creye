@@ -11,7 +11,3 @@
 3. Symbol identity MUST tolerate unresolved semantic symbols.
 4. Symbol identity MUST support nested declarations and overloaded callable declarations.
 5. Symbol identity SHOULD include display metadata useful for diagnostics and rendering.
-## Decision
-- TBD through targeted discussion.
-## Rationale
-- TBD through targeted discussion.
