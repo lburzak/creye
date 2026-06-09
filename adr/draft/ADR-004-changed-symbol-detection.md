@@ -1,7 +1,7 @@
 # ADR-004 Changed Symbol Detection
 
 ## Problem & Context
-- The MVP must identify changed Kotlin symbols at file, class, function, and property granularity where feasible.
+- Analysis must identify changed Kotlin symbols at file, class, function, and property granularity where feasible.
 - Git diffs identify changed lines or hunks, while Kotlin PSI identifies declarations and source ranges.
 - Some edits affect a declaration directly, while others affect file-level structure, imports, annotations, modifiers, or containing declarations.
 - Declaration mapping may be ambiguous for malformed code, incomplete indexing, or unresolved project state.

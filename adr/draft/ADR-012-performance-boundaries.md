@@ -3,7 +3,7 @@
 ## Problem & Context
 - Kotlin project analysis and dependency search can be expensive on large Gradle projects.
 - The plugin must remain responsive while analysis runs.
-- The MVP should prioritize changed files and changed symbols over exhaustive whole-project analysis.
+- Analysis should prioritize changed files and changed symbols over exhaustive whole-project analysis.
 - Partial, cancelled, or bounded analysis can still be useful if limitations are visible.
 ## Constraints
 1. Long-running analysis MUST run outside the UI thread.

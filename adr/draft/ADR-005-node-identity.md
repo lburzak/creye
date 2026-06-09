@@ -3,7 +3,7 @@
 ## Problem & Context
 - A node is any element of the graph hierarchy (module, package, file, class, or symbol). Graph construction, dependency resolution, collapse aggregation, rendering, and diagnostics all need stable references to the same nodes.
 - Kotlin symbols can be overloaded, nested, moved, renamed, or unresolved.
-- IntelliJ or Kotlin semantic identifiers may not be available for every declaration during MVP analysis.
+- IntelliJ or Kotlin semantic identifiers may not be available for every declaration during analysis.
 - Incorrect identity rules can merge unrelated symbols or split one logical symbol across graph phases.
 ## Constraints
 1. Node identity MUST be deterministic within a single analysis run.

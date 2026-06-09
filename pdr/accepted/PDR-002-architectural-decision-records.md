@@ -11,6 +11,7 @@
 Architectural Decision Record (ADR)
 
 - MUST be indexed for coding tasks
+- MUST be exclusively scoped to source code engineering; MUST not relate to any project management concerns or vocabulary
 - MUST be followed, if its status is Accepted
 - MUST NOT be followed, if its status is Rejected or Deprecated
 - ID MUST be within 0...999 range, padded with zeros to maintain order

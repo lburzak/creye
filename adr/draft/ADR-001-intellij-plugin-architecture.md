@@ -1,10 +1,10 @@
 # ADR-001 IntelliJ Plugin Architecture
 
 ## Problem & Context
-- The campaign requires an IntelliJ plugin editor panel that displays Kotlin symbol dependency graphs.
+- The plugin must provide an IntelliJ editor panel that displays Kotlin symbol dependency graphs.
 - The plugin needs a clear entry point for launching analysis from the IDE.
 - IDE integration, analysis orchestration, graph modeling, and graph rendering have different responsibilities and failure modes.
-- Without explicit boundaries, early MVP code can couple IntelliJ action handling to git comparison, Kotlin PSI traversal, dependency analysis, and rendering.
+- Without explicit boundaries, plugin code can couple IntelliJ action handling to git comparison, Kotlin PSI traversal, dependency analysis, and rendering.
 ## Constraints
 1. The implementation MUST use IntelliJ Platform APIs for plugin actions, project access, background execution, and editor integration where practical.
 2. The implementation MUST keep analysis orchestration separate from UI rendering.
@@ -20,7 +20,7 @@
 - The domain layer MUST NOT depend on the rendering layer or the IDE integration layer's entry points.
 - The rendering layer MUST consume only the graph view model produced by orchestration, and MUST NOT access git, PSI, or dependency resolution data directly.
 - The orchestration service MUST be invocable independently of the `AnAction` and `FileEditorProvider` so analysis behavior can be tested without UI.
-- The MVP MUST keep all layers in a single Gradle module and enforce layer boundaries by package structure.
+- All layers MUST reside in a single Gradle module, with layer boundaries enforced by package structure.
 
 ## Rationale
 - Four inward-pointing layers give each responsibility from Problem & Context its own seam, satisfying constraints 2 and 3 by construction rather than convention.
@@ -28,4 +28,4 @@
 - A project-level service is the platform's natural unit for lifecycle, dependency access, and a cancellable coroutine scope, serving constraints 1 and 4; making it invocable without UI serves constraint 5.
 - A coroutine scope over `Task.Backgroundable` keeps cancellation and structured concurrency explicit while still moving work off the UI thread (constraint 4).
 - Routing rendering through a view model produced by orchestration keeps graph model construction independent of the panel (constraint 3) and prevents the renderer from coupling to git or PSI (constraint 2).
-- A single Gradle module with package-enforced boundaries avoids multi-module ceremony the MVP does not need; the layer rules above still keep boundaries explicit, and a module split remains open if compile-time enforcement becomes worthwhile later.
+- A single Gradle module with package-enforced boundaries avoids multi-module ceremony that is not currently warranted; the layer rules above still keep boundaries explicit, and a module split remains open if compile-time enforcement becomes worthwhile later.
