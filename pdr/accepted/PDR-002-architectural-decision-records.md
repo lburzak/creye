@@ -40,7 +40,8 @@ Architectural Decision Record (ADR)
 
 - Document
   - Name MUST match format `ADR-{{id}}-{{title}}.md`
-    - Name MUST be kebab-case
+    - `ADR-` prefix MUST be uppercase literal
+    - `{{title}}` MUST be kebab-case
   - Path MUST be a subdirectory of `adr` indicating its status e.g. `adr/accepted`
     - MUST be Markdown
   - MUST contain in order

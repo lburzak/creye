@@ -15,7 +15,7 @@
 - The plugin MUST be organized into four layers with dependencies pointing inward: IDE integration, orchestration, domain, and rendering.
 - The IDE integration layer MUST contain only IntelliJ entry points and platform access, and MUST NOT contain git comparison, PSI traversal, dependency resolution, graph construction, or rendering logic.
 - Analysis MUST be launched from an `AnAction` that opens the graph in an editor panel through a `FileEditorProvider`.
-- The orchestration layer MUST be a project-level IntelliJ service that runs the analysis pipeline and produces a graph view model.
+- The orchestration layer MUST be a project-level IntelliJ service that runs the analysis pipeline and produces a graph view model — the render-facing projection derived from the domain graph model governed by ADR-007.
 - The orchestration service MUST run long-running analysis off the UI thread using a plugin-owned coroutine scope, and MUST support cancellation.
 - The domain layer MUST NOT depend on the rendering layer or the IDE integration layer's entry points.
 - The rendering layer MUST consume only the graph view model produced by orchestration, and MUST NOT access git, PSI, or dependency resolution data directly.

@@ -6,7 +6,7 @@
 - Aggregated dependency edges can become misleading if direction, classification, or multiplicity is lost.
 - The renderer needs a predictable visible graph derived from the full graph and current collapse state.
 ## Constraints
-1. The implementation MUST preserve visibility of dependencies when nodes are collapsed by aggregating child edges onto visible ancestors.
+1. The implementation MUST preserve visibility of dependencies when nodes are collapsed by aggregating child edges onto visible ancestors (realizing CAMPAIGN constraint 4).
 2. Aggregation MUST preserve dependency direction.
 3. Aggregation MUST preserve internal, external, and cohesion classification where feasible.
 4. Aggregation MUST avoid rendering duplicate equivalent visible edges.

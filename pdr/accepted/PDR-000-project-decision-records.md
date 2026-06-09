@@ -38,7 +38,8 @@ Project Decision Record (PDR)
 
 - Document
   - Name MUST match format `PDR-{{id}}-{{title}}.md`
-    - Name MUST be kebab-case
+    - `PDR-` prefix MUST be uppercase literal
+    - `{{title}}` MUST be kebab-case
   - Path MUST be a subdirectory of `pdr` indicating its status e.g. `pdr/accepted`
     - MUST be Markdown
   - MUST contain in order

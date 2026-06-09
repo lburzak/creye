@@ -5,8 +5,6 @@
 - Documentation degrades over time: declarations duplicate, conflict, drift, or violate their own templates.
 - Degraded documentation misleads readers and AI agents, which act on stated rules as if they were current and correct.
 
-## Constraints
-
 ## Decision
 
 - Audit MUST exclude symbolic links from analysis
@@ -24,7 +22,7 @@
     - `correctness` — non-adherence to rules and templates
     - `style` — formatting, typos, and similar surface defects
   - `locations` MUST be an array of location references
-  - `message` MUST what the issue is and why it qualifies
+  - `message` MUST state what the issue is and why it qualifies
 
 ## Rationale
 

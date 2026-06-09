@@ -15,4 +15,5 @@
     - **Internal** — unchanged symbols in the same project that the changed code depends on.
     - **External** — symbols in libraries or the JDK that the changed code depends on.
     - **Cohesion** — dependencies among the changed symbols themselves, including relationships that span the different changed files.
+- A **related** node is an unchanged node pulled into the graph solely as the target of a changed symbol's internal or external dependency, as opposed to the changed nodes that form the cohesion set.
 - Draw the graph inside an IntelliJ plugin editor panel.

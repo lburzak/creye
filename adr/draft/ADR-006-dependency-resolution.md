@@ -1,20 +1,18 @@
 # ADR-006 Dependency Resolution
 
 ## Problem & Context
-- The analysis focuses on the changed code; the insight is what symbols the changed code depends on.
-- Dependency targets fall into three classes: unchanged symbols in the project (internal), symbols in libraries or the JDK (external), and other changed symbols (cohesion).
-- Cohesion dependencies must include dependencies among changed symbols across different files.
+- The analysis focuses on the changed code; the insight is what symbols the changed code depends on, classified by where the target lives per the internal / external / cohesion definitions in CORE-USE-CASE.md.
+- This record must decide how those edges are resolved and classified; it does not re-define the edge classes.
 - Dependencies must be resolved from the changed lines and declarations, not from whole changed files.
-- The campaign does not require full semantic parity with IntelliJ dependency analyzer behavior.
-- The campaign does not require reverse usage search (which unchanged code depends on a changed symbol); only the dependencies the changed code itself declares are in scope.
+- The campaign does not require full semantic parity with IntelliJ dependency analyzer behavior, nor reverse usage search (see CAMPAIGN Out of Scope).
 - Kotlin references may be unresolved because of generated sources, incomplete project state, indexing, or unsupported language constructs.
 - IntelliJ ships the K2 Kotlin frontend by default; K1 resolution APIs are deprecated.
 ## Constraints
 1. The implementation MUST prefer IntelliJ Platform and Kotlin symbol inspection APIs where available.
-2. The implementation MUST classify each dependency edge of the changed code by its target as internal (an unchanged symbol in the project), external (a symbol in a library or the JDK), or cohesion (another changed symbol).
+2. The implementation MUST classify each dependency edge of the changed code as internal, external, or cohesion per the definitions in CORE-USE-CASE.md.
 3. The implementation MUST include cohesion dependencies among changed symbols across different files.
 4. The implementation MUST resolve dependencies from the changed lines and declarations, not from whole changed files.
-5. The implementation MUST resolve dependencies by forward inspection of changed code only, and MUST NOT rely on reverse usage search.
+5. The implementation MUST resolve dependencies by forward inspection of changed code only, and MUST NOT rely on reverse usage search (per CAMPAIGN Out of Scope).
 6. The implementation MUST tolerate unresolved references without failing the whole analysis.
 7. The implementation MUST expose diagnostics for unresolved references and unsupported dependency cases.
 ## Decision
