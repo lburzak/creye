@@ -15,11 +15,12 @@
 - Branch selection and upfront branch configuration validation are governed by ADR-011; git change comparison MUST consume the configured branch reference as input.
 - The comparison baseline MUST be the merge base of `HEAD` and the configured comparison branch.
 - The implementation MUST compare the baseline tree against the current working directory, including staged and unstaged changes.
-- The implementation MUST normalize git output into changed-file records containing path, previous path when available, file state, Kotlin/non-Kotlin classification, and changed source ranges where available.
-- Modified Kotlin files MUST expose changed source ranges derived from diff hunks in the current file.
-- Added Kotlin files MUST be represented as whole-file changes.
-- Deleted Kotlin files MUST be represented as file-level deletions without requiring current PSI extraction.
-- Renamed Kotlin files MUST preserve both previous and current paths; content changes after rename MUST still expose changed source ranges when available.
+- The implementation MUST normalize git output into changed-file records containing path, previous path when available, file state, Kotlin/non-Kotlin classification, baseline and current content access, and changed source ranges where available.
+- Changed source ranges MUST be two-sided: each hunk MUST expose its baseline-side removed range and its current-side added range, so symbol extraction can map additions and modifications against current content and deletions against baseline content.
+- Modified Kotlin files MUST expose both baseline and current content and the two-sided changed ranges derived from diff hunks.
+- Added Kotlin files MUST be represented as whole-file changes exposing current content.
+- Deleted Kotlin files MUST be represented as file-level deletions exposing baseline content, without requiring current PSI extraction, so symbol extraction can enumerate the deleted declarations.
+- Renamed Kotlin files MUST preserve both previous and current paths; content changes after rename MUST still expose two-sided changed ranges and both baseline and current content when available.
 - Git comparison MUST NOT perform Kotlin declaration lookup, symbol extraction, dependency resolution, or graph construction.
 - Non-Kotlin changed files MUST NOT be passed to ADR-004 as changed Kotlin files; they MAY be retained as comparison metadata or diagnostics.
 - Comparison-time failures MUST be reported as git diagnostics, including missing or unresolved branch references, non-git projects, unsupported file states, and diff failures.
@@ -29,4 +30,5 @@
 - Comparing the baseline tree to the working directory includes committed, staged, and unstaged local changes in one analysis input, satisfying constraint 3 without requiring callers to run separate staged and unstaged comparisons.
 - Normalizing git output before symbol extraction gives ADR-004 a stable changed-file set and range contract, satisfying constraint 4 while keeping Kotlin PSI concerns out of git comparison.
 - Representing added, deleted, and renamed files explicitly prevents downstream phases from inferring file state from path or range absence.
+- Exposing two-sided ranges and both baseline and current content lets ADR-004 build current PSI for additions and modifications and baseline PSI for deletions, so deleted symbols can be enumerated without ADR-004 reaching into git, keeping git comparison separated from symbol extraction (constraint 2).
 - Keeping non-Kotlin changes out of ADR-004 preserves that record's Kotlin-symbol scope while still allowing diagnostics or future metadata consumers to explain ignored changes.
