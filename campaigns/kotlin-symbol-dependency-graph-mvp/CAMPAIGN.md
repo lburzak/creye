@@ -23,12 +23,5 @@
 - `graph-rendering`: Render the collapsible dependency graph in an IntelliJ editor panel.
 - `mvp-validation`: Validate the end-to-end flow on a representative Kotlin project.
 
-## Constraints
-1. Implementation MUST prefer IntelliJ Platform APIs for project structure, PSI, editor integration, and Kotlin symbol inspection when available.
-2. Implementation MUST keep git comparison logic separated from Kotlin symbol extraction.
-3. Implementation MUST keep graph model construction independent from the UI renderer.
-4. Implementation MUST preserve visibility of dependencies when nodes are collapsed by aggregating child edges onto the visible ancestor.
-5. Implementation MUST expose enough diagnostic information to explain missing or unresolved symbols during MVP validation.
-
 ## Completion
 - The campaign is complete when every Milestone above is achieved; each Milestone's own Challenge defines its verification.

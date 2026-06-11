@@ -10,8 +10,8 @@
 ## Decision
 Architectural Decision Record (ADR)
 
-- MUST be indexed for coding tasks
-- MUST be exclusively scoped to source code engineering; MUST not relate to any project management concerns or vocabulary
+- The record collection MUST be acknowledged — loaded into the working context, including an AI agent's — before coding tasks begin
+- MUST be exclusively scoped to source code engineering; MUST NOT relate to any project management concerns or vocabulary
 - MUST be followed, if its status is Accepted
 - MUST NOT be followed, if its status is Rejected or Deprecated
 - ID MUST be within 0...999 range, padded with zeros to maintain order
@@ -60,9 +60,10 @@ Architectural Decision Record (ADR)
     - **Decision** section
       - MUST list rules that must be followed to comply with the decision
       - SHOULD feature clear imperatives like RFC 2119
-      - MAY be omitted, if status is **Draft**
+      - MAY be omitted, if status is **Draft**, or **Rejected** when no single decision was reached
+      - MUST NOT contradict any other accepted ADR decision
     - **Rationale** section
-      - MAY be omitted, if status is **Draft**
+      - MAY be omitted, if status is **Draft**, or **Rejected** when no single decision was reached
     - **Rejection reason** section, if status is **Rejected**
   - MAY contain **Notes** section
   - MUST NOT contain **Status** as it is inferred from document path

@@ -24,7 +24,7 @@
 
 ## Rationale
 - Four inward-pointing layers give each responsibility from Problem & Context its own seam, satisfying constraints 2 and 3 by construction rather than convention.
-- An `AnAction` plus `FileEditorProvider` is the idiomatic IntelliJ path for a launchable editor panel (constraint 1) and matches the core use case's "editor panel" requirement rather than a tool window.
+- An `AnAction` plus `FileEditorProvider` is the idiomatic IntelliJ path for a launchable editor panel (constraint 1), keeping the graph in an editor panel rather than a tool window.
 - A project-level service is the platform's natural unit for lifecycle, dependency access, and a cancellable coroutine scope, serving constraints 1 and 4; making it invocable without UI serves constraint 5.
 - A coroutine scope over `Task.Backgroundable` keeps cancellation and structured concurrency explicit while still moving work off the UI thread (constraint 4).
 - Routing rendering through a view model produced by orchestration keeps graph model construction independent of the panel (constraint 3) and prevents the renderer from coupling to git or PSI (constraint 2).

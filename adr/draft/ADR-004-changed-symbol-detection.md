@@ -23,10 +23,10 @@
 - When the PSI needed for a hunk is malformed or unparseable, detection MUST fall back to a file-level change (constraint 3). When a hunk cannot be located in any PSI range on either side, detection MUST emit a diagnostic (constraint 5). This declaration → file → diagnostic ladder is the resolution of every "where feasible" hedge in constraints 2 and 4.
 - Detection MUST NOT filter changes by significance; comment- and whitespace-only edits MUST mark the enclosing own-range declaration changed. Detection MAY tag a change with whether all intersecting tokens were comment or whitespace, as non-dropping metadata for consumers that choose to filter.
 - Detected declarations MUST be bridged to ADR-005 node identity so downstream phases refer to the same nodes.
-- Diagnostics MUST be reported as symbol-extraction diagnostics per ADR-010.
+- Diagnostics MUST be reported as changed-symbol-detection diagnostics per ADR-010.
 
 ## Rationale
-- Consuming ADR-003 records instead of re-deriving the changed-file set keeps git comparison and symbol extraction separated (constraint 1), and reading content rather than git keeps ADR-004 out of the git boundary that ADR-003 owns.
+- Consuming ADR-003 records instead of re-deriving the changed-file set keeps git comparison and changed symbol detection separated (constraint 1), and reading content rather than git keeps ADR-004 out of the git boundary that ADR-003 owns.
 - The own-range subtraction rule is what lets a hunk be attributed to the smallest enclosing declaration without marking every ancestor changed, because a Kotlin declaration's source range encloses its children. This directly satisfies the changed-versus-contextual distinction (constraint 4) and gives "changed declaration" a precise meaning (constraint 2).
 - Treating the file as the root declaration unifies file-level structure (imports, package directive, file annotations) with the same rule, so structural edits are deterministic file-level changes rather than ambiguous or undiagnosed ones, which keeps constraint 3 about genuine ambiguity and constraint 5 about genuinely unmappable hunks.
 - Detecting deletions against baseline PSI lists the symbols that disappeared, which downstream impact analysis needs; collapsing deletions to a parent would satisfy the letter of constraint 2 while losing the very symbols a change set must surface. This is why ADR-003 was extended to expose baseline content and two-sided ranges.

@@ -17,7 +17,7 @@
   - `type` MUST be either of:
     - `redundancy` — duplicated declarations
     - `alignment` — conflicting declarations
-    - `cohesion` — mixing concerns inside a single document
+    - `coupling` — mixing concerns inside a single document
     - `consistency` — same term used with different meanings
     - `correctness` — non-adherence to rules and templates
     - `style` — formatting, typos, and similar surface defects
@@ -27,5 +27,5 @@
 ## Rationale
 
 - A closed set of types makes findings triageable and comparable across audits.
-- Separating redundancy, alignment, cohesion, consistency, correctness, and style isolates distinct failure modes, each with a different kind of fix.
+- Separating redundancy, alignment, coupling, consistency, correctness, and style isolates distinct failure modes, each with a different kind of fix.
 - A fixed TOML schema makes findings machine-readable, deduplicable by `id`, and trackable to resolution.

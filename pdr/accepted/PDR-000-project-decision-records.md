@@ -7,10 +7,11 @@
 	- Enforces constant improvement of them, by providing the basis to build upon
 ## Decision
 Project Decision Record (PDR)
-- MUST be indexed for management and planning tasks
+- The record collection MUST be acknowledged — loaded into the working context, including an AI agent's — before management and planning tasks begin
 - MUST be followed, if its status is Accepted
 - MUST NOT be followed, if its status is Rejected or Deprecated
 - ID MUST be within 0...999 range, padded with zeros to maintain order
+- A record MAY restate content owned by another record rather than only referencing it
 
 - Title
   - MUST be Title Case
@@ -57,15 +58,17 @@ Project Decision Record (PDR)
     - **Decision** section
       - MUST list rules that must be followed to comply with the decision
       - SHOULD feature clear imperatives like RFC 2119
-      - MAY be omitted, if status is **Draft**
+      - MAY be omitted, if status is **Draft**, or **Rejected** when no single decision was reached
+      - MUST NOT contradict any other accepted PDR decision
     - **Rationale** section
-      - MAY be omitted, if status is **Draft**
+      - MAY be omitted, if status is **Draft**, or **Rejected** when no single decision was reached
     - **Rejection reason** section, if status is **Rejected**
   - MAY contain **Notes** section
   - MUST NOT contain **Status** as it is inferred from document path
 
 ## Rationale
 - Formal PDRs make project decisions accessible to both people and AI agents.
-- PDRs provide a composable model of project configuration by separating durable procedural decisions into small, indexed records.
+- PDRs provide a composable model of project configuration by separating durable procedural decisions into small, individually acknowledgeable records.
 - Embedding decisions in context makes them valuable for future improvements, because later work can reuse the recorded reasoning instead of rediscovering it.
 - Durable PDRs reduce repeated discussion and improve the quality of future management, planning, and implementation decisions.
+- Allowing a record to restate another's content keeps it self-contained, so a reader applies one record without chasing references and fewer records must be loaded for a given task.
