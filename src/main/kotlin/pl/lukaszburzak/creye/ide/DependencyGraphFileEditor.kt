@@ -5,6 +5,8 @@ import com.intellij.openapi.fileEditor.FileEditorState
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.UserDataHolderBase
 import com.intellij.openapi.vfs.VirtualFile
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import org.jetbrains.jewel.bridge.JewelComposePanel
 import pl.lukaszburzak.creye.rendering.GraphSurface
 import java.beans.PropertyChangeListener
@@ -19,8 +21,15 @@ class DependencyGraphFileEditor(
     private val file: VirtualFile,
 ) : UserDataHolderBase(), FileEditor {
 
+    private val controller = GraphPanelController.getInstance(project).also { it.activate() }
+
     private val panel: JComponent = JewelComposePanel {
-        GraphSurface()
+        val state by controller.state.collectAsState()
+        GraphSurface(
+            state = state,
+            onBranchSelected = controller::selectBranch,
+            onRefresh = controller::refresh,
+        )
     }
 
     override fun getComponent(): JComponent = panel
