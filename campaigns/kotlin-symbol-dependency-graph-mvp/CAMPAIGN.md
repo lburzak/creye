@@ -17,7 +17,7 @@
 - The MVP MUST NOT require reverse usage search (which unchanged code depends on a changed symbol); only the dependencies the changed code itself declares are in scope.
 
 ## Milestones
-- `plugin-foundation`: Establish the IntelliJ plugin shell and editor panel entry point.
+- `plugin-foundation`: Establish the IntelliJ plugin shell and editor panel entry point. **Done**
 - `change-detection`: Compare a branch against the working directory and locate changed Kotlin declarations.
 - `dependency-model`: Build the hierarchical node and directional dependency edge model.
 - `graph-rendering`: Render the collapsible dependency graph in an IntelliJ editor panel.
