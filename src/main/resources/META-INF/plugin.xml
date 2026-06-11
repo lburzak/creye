@@ -9,6 +9,7 @@
 
     <depends>com.intellij.modules.platform</depends>
     <depends>org.jetbrains.kotlin</depends>
+    <depends>Git4Idea</depends>
 
     <dependencies>
         <module name="intellij.libraries.compose.foundation.desktop"/>
