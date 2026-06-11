@@ -20,7 +20,7 @@
 - `plugin-foundation`: Establish the IntelliJ plugin shell and editor panel entry point. **Done**
 - `change-detection`: Compare a branch against the working directory and locate changed Kotlin declarations. **Done** (manual end-to-end check folds into `mvp-validation`)
 - `dependency-model`: Build the hierarchical node and directional dependency edge model. **Done** (manual end-to-end check folds into `mvp-validation`)
-- `graph-rendering`: Render the collapsible dependency graph in an IntelliJ editor panel.
+- `graph-rendering`: Render the collapsible dependency graph in an IntelliJ editor panel. **Done** (manual `runIde` checks fold into `mvp-validation`)
 - `mvp-validation`: Validate the end-to-end flow on a representative Kotlin project.
 
 ## Completion
