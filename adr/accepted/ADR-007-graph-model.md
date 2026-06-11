@@ -4,7 +4,7 @@
 - The graph must represent both hierarchy and dependencies.
 - The graph hierarchy includes modules, packages, files, classes, and symbols.
 - The dependency model must remain independent from the UI renderer.
-- This record governs the domain graph model. The render-facing graph view model consumed by ADR-001 and ADR-009 is a projection derived from this model by orchestration (applying collapse aggregation per ADR-008); it is not a second source of truth.
+- This record governs the domain graph model. The render-facing graph view model rendered by ADR-009 is a projection derived from this model by the rendering layer (applying collapse aggregation per ADR-008 over the interactive collapse state); it is not a second source of truth.
 - Diagnostics need to remain connected to the graph elements they explain.
 ## Constraints
 1. Graph model construction MUST be independent from the UI renderer.
