@@ -178,6 +178,7 @@ class ChangedSymbolDetector(
         val fileName = file.path.substringAfterLast('/')
         val ktFile = KtPsiFactory(project, markGenerated = false).createFile(fileName, content)
         val context = fileSegments(file.path)
+        diagnostics.addDistinct(context.diagnostics)
         val filePath = NodePathFactory.filePath(ktFile, context, fileName)
         if (PsiTreeUtil.hasErrorElements(ktFile)) {
             diagnostics += Diagnostic(
@@ -187,6 +188,12 @@ class ChangedSymbolDetector(
             return ParseResult.Malformed(filePath, fileName)
         }
         return ParseResult.Parsed(DeclTree.build(ktFile, filePath, fileName))
+    }
+}
+
+private fun MutableList<Diagnostic>.addDistinct(newDiagnostics: List<Diagnostic>) {
+    for (diagnostic in newDiagnostics) {
+        if (diagnostic !in this) add(diagnostic)
     }
 }
 

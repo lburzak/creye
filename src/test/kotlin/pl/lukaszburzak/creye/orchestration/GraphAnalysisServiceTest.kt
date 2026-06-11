@@ -19,4 +19,15 @@ class GraphAnalysisServiceTest : BasePlatformTestCase() {
         assertEquals(DiagnosticSource.GIT, diagnostic.source)
         assertEquals(Severity.ERROR, diagnostic.severity)
     }
+
+    fun `test analyze on non-git project yields empty graph with git diagnostic`() {
+        val service = GraphAnalysisService.getInstance(project)
+        val graph = runBlocking { service.analyze("main").await() }
+        assertEmpty(graph.structuralNodes)
+        assertEmpty(graph.externalNodes)
+        assertEmpty(graph.edges)
+        val diagnostic = graph.diagnostics.single()
+        assertEquals(DiagnosticSource.GIT, diagnostic.source)
+        assertEquals(Severity.ERROR, diagnostic.severity)
+    }
 }

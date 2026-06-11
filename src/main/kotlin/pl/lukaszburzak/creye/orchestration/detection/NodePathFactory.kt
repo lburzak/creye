@@ -5,12 +5,17 @@ import org.jetbrains.kotlin.psi.KtDeclaration
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.psi.KtNamedFunction
 import org.jetbrains.kotlin.psi.KtProperty
+import pl.lukaszburzak.creye.domain.diagnostics.Diagnostic
 import pl.lukaszburzak.creye.domain.identity.CallableDiscriminator
 import pl.lukaszburzak.creye.domain.identity.NodePath
 import pl.lukaszburzak.creye.domain.identity.NodeSegment
 
 /** Module context for the file segment; supplied by the caller (ADR-002 seam). */
-data class FileSegmentContext(val moduleId: String, val moduleRelativePath: String)
+data class FileSegmentContext(
+    val moduleId: String,
+    val moduleRelativePath: String,
+    val diagnostics: List<Diagnostic> = emptyList(),
+)
 
 /**
  * Mints ADR-005 structural-path identity from PSI text only — no resolved types,
