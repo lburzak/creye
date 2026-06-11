@@ -1,1 +1,2 @@
 - You MUST comply to `pdr/accepted/PDR-000-project-decision-records.md`
+- You MUST NOT include Co-Authored-By attributions in commit messages
