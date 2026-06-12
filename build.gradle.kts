@@ -12,6 +12,8 @@ version = "0.1.0"
 
 repositories {
     mavenCentral()
+    // Gephi publishes a few legacy transitive artifacts here, including stax-utils.
+    maven("https://raw.github.com/gephi/gephi/mvn-thirdparty-repo/")
     intellijPlatform {
         defaultRepositories()
     }
@@ -36,6 +38,12 @@ dependencies {
         )
         testFramework(TestFrameworkType.Platform)
     }
+    // ADR-013: ForceAtlas2 comes from Gephi's JVM layout implementation. These Gephi
+    // NetBeans modules use nbm packaging, so the adapter requests their jar artifacts
+    // explicitly; Gephi 0.10.1 pins graphstore to 0.6.14 in its parent POM.
+    implementation("org.gephi:layout-plugin:0.10.1@jar")
+    implementation("org.gephi:layout-api:0.10.1@jar")
+    implementation("org.gephi:graphstore:0.6.14")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.opentest4j:opentest4j:1.3.0")
 }

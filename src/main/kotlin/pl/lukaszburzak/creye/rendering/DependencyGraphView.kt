@@ -11,6 +11,7 @@ import pl.lukaszburzak.creye.domain.graph.DependencyGraph
 import pl.lukaszburzak.creye.domain.graph.GraphNodeId
 import pl.lukaszburzak.creye.domain.identity.NodePath
 import pl.lukaszburzak.creye.rendering.canvas.GraphCanvas
+import pl.lukaszburzak.creye.rendering.layout.LayoutPoint
 import pl.lukaszburzak.creye.rendering.layout.layoutVisibleGraph
 import pl.lukaszburzak.creye.rendering.projection.projectVisibleGraph
 
@@ -23,18 +24,12 @@ import pl.lukaszburzak.creye.rendering.projection.projectVisibleGraph
 fun DependencyGraphView(graph: DependencyGraph, modifier: Modifier = Modifier) {
     var collapsed by remember(graph) { mutableStateOf(emptySet<NodePath>()) }
     var selected by remember(graph) { mutableStateOf<GraphNodeId?>(null) }
+    var movedCenters by remember(graph) { mutableStateOf(emptyMap<GraphNodeId, LayoutPoint>()) }
 
     val visible = remember(graph, collapsed) { projectVisibleGraph(graph, collapsed) }
-    val layout = remember(visible) { layoutVisibleGraph(visible) }
+    val baseLayout = remember(visible) { layoutVisibleGraph(visible, movedCenters) }
+    val layout = remember(baseLayout, movedCenters) { baseLayout.withCenters(movedCenters) }
 
-    // Only nodes with descendants can collapse; leaves have nothing to hide.
-    val collapsible = remember(graph) {
-        graph.structuralNodes
-            .map { it.path }
-            .flatMapTo(mutableSetOf()) { path ->
-                (1 until path.segments.size).map { NodePath(path.segments.subList(0, it)) }
-            }
-    }
     val diagnosticNodes = remember(graph) {
         graph.diagnostics
             .mapNotNullTo(mutableSetOf()) { (it.attachment as? DiagnosticAttachment.Node)?.id }
@@ -46,11 +41,19 @@ fun DependencyGraphView(graph: DependencyGraph, modifier: Modifier = Modifier) {
         selected = selected,
         diagnosticNodes = diagnosticNodes,
         onSelect = { selected = it },
-        onToggleCollapse = { id ->
-            if (id.path in collapsible) {
-                collapsed = if (id.path in collapsed) collapsed - id.path else collapsed + id.path
-            }
-        },
+        onExpand = { id -> collapsed = collapsed - id.path },
+        onCollapseSelfAndSiblings = { id -> collapsed = collapsed + collapseSelfAndSiblings(graph, id.path) },
+        onMoveNode = { id, center -> movedCenters = movedCenters + (id to center) },
         modifier = modifier,
     )
 }
+
+internal fun collapseSelfAndSiblings(graph: DependencyGraph, path: NodePath): Set<NodePath> {
+    val parent = path.parent()
+    return graph.structuralNodes
+        .map { it.path }
+        .filterTo(mutableSetOf()) { it.parent() == parent }
+}
+
+private fun NodePath.parent(): NodePath? =
+    if (segments.size <= 1) null else NodePath(segments.subList(0, segments.size - 1))

@@ -2,8 +2,12 @@ package pl.lukaszburzak.creye.rendering.layout
 
 import junit.framework.TestCase.assertEquals
 import junit.framework.TestCase.assertFalse
+import junit.framework.TestCase.assertNotSame
 import junit.framework.TestCase.assertTrue
 import org.junit.Test
+import pl.lukaszburzak.creye.domain.graph.DependencyClassification
+import pl.lukaszburzak.creye.domain.graph.DependencyEdge
+import pl.lukaszburzak.creye.domain.graph.DependencyKind
 import pl.lukaszburzak.creye.domain.graph.ExternalNode
 import pl.lukaszburzak.creye.domain.graph.ExternalSymbolId
 import pl.lukaszburzak.creye.domain.graph.GraphNodeId
@@ -11,8 +15,10 @@ import pl.lukaszburzak.creye.domain.graph.StructuralNode
 import pl.lukaszburzak.creye.domain.graph.displayName
 import pl.lukaszburzak.creye.domain.identity.NodePath
 import pl.lukaszburzak.creye.domain.identity.NodeSegment
+import pl.lukaszburzak.creye.rendering.projection.VisibleEdge
 import pl.lukaszburzak.creye.rendering.projection.VisibleGraph
 import pl.lukaszburzak.creye.rendering.projection.VisibleNode
+import kotlin.math.hypot
 
 class GraphLayoutTest {
 
@@ -20,96 +26,77 @@ class GraphLayoutTest {
 
     private val module = NodeSegment.Module("app")
     private val pkg = NodeSegment.Package("com.a")
+    private val file = path(module, pkg, NodeSegment.File("A.kt", "src/A.kt"))
 
-    private fun visibleGraph(paths: List<NodePath>, externals: List<ExternalNode> = emptyList()) =
-        VisibleGraph(
-            structuralNodes = paths.map {
-                VisibleNode(StructuralNode(it, it.displayName(), change = null), isCollapsed = false, internalizedEdges = emptySet())
-            },
-            externalNodes = externals,
-            edges = emptyList(),
-        )
+    private fun visibleGraph(
+        paths: List<NodePath>,
+        externals: List<ExternalNode> = emptyList(),
+        edges: List<VisibleEdge> = emptyList(),
+    ) = VisibleGraph(
+        structuralNodes = paths.map {
+            VisibleNode(StructuralNode(it, it.displayName(), change = null), isCollapsed = false, internalizedEdges = emptySet())
+        },
+        externalNodes = externals,
+        edges = edges,
+    )
 
-    private fun manySymbols(count: Int): List<NodePath> {
-        val file = path(module, pkg, NodeSegment.File("A.kt", "src/A.kt"))
-        return listOf(path(module), path(module, pkg), file) +
+    private fun manySymbols(count: Int): List<NodePath> =
+        listOf(path(module), path(module, pkg), file) +
             (1..count).map { NodePath(file.segments + NodeSegment.Symbol("symbol$it", null)) }
-    }
 
     @Test
-    fun `every visible node gets bounds`() {
+    fun `every visible node gets constant circle bounds`() {
         val paths = manySymbols(12)
         val externals = listOf(ExternalNode(ExternalSymbolId("kotlin/io/println", "println")))
 
         val layout = layoutVisibleGraph(visibleGraph(paths, externals))
 
         assertEquals(paths.size + externals.size, layout.bounds.size)
+        assertTrue(layout.bounds.values.all { it.width == LayoutMetrics.NODE_DIAMETER })
+        assertTrue(layout.bounds.values.all { it.height == LayoutMetrics.NODE_DIAMETER })
     }
 
     @Test
-    fun `children lie within parent bounds below header band`() {
-        val layout = layoutVisibleGraph(visibleGraph(manySymbols(12)))
+    fun `dependency edges influence force layout`() {
+        val a = NodePath(file.segments + NodeSegment.Symbol("a", null))
+        val b = NodePath(file.segments + NodeSegment.Symbol("b", null))
+        val c = NodePath(file.segments + NodeSegment.Symbol("c", null))
+        val source = GraphNodeId.Structural(a)
+        val target = GraphNodeId.Structural(b)
+        val edge = DependencyEdge(a, target, DependencyClassification.INTERNAL, DependencyKind.CALL)
+        val connected = visibleGraph(
+            paths = listOf(path(module), path(module, pkg), file, a, b, c),
+            edges = listOf(VisibleEdge(source, target, setOf(DependencyClassification.INTERNAL), setOf(edge))),
+        )
+        val disconnected = visibleGraph(paths = listOf(path(module), path(module, pkg), file, a, b, c))
 
-        for ((id, rect) in layout.bounds) {
-            val structural = id as GraphNodeId.Structural
-            if (structural.path.segments.size == 1) continue
-            val parent = NodePath(structural.path.segments.dropLast(1))
-            val parentRect = layout.bounds.getValue(GraphNodeId.Structural(parent))
-            assertTrue("$structural outside parent", parentRect.contains(rect))
-            assertTrue("$structural overlaps header", rect.y >= parentRect.y + LayoutMetrics.HEADER_HEIGHT)
-        }
+        val connectedDistance = layoutVisibleGraph(connected).distance(source, target)
+        val disconnectedDistance = layoutVisibleGraph(disconnected).distance(source, target)
+
+        assertTrue("connected=$connectedDistance disconnected=$disconnectedDistance", connectedDistance < disconnectedDistance)
     }
 
     @Test
-    fun `siblings never overlap`() {
-        val layout = layoutVisibleGraph(visibleGraph(manySymbols(20)))
-
-        val byParent = layout.bounds.keys
-            .filterIsInstance<GraphNodeId.Structural>()
-            .filter { it.path.segments.size > 1 }
-            .groupBy { NodePath(it.path.segments.dropLast(1)) }
-        for ((_, siblings) in byParent) {
-            for (i in siblings.indices) for (j in i + 1 until siblings.size) {
-                val a = layout.bounds.getValue(siblings[i])
-                val b = layout.bounds.getValue(siblings[j])
-                assertFalse("${siblings[i]} overlaps ${siblings[j]}", a.overlaps(b))
-            }
-        }
-    }
-
-    @Test
-    fun `root modules never overlap`() {
-        val paths = listOf(
-            path(NodeSegment.Module("app")),
-            path(NodeSegment.Module("lib")),
-            path(NodeSegment.Module("core")),
+    fun `layout uses seed positions for stable recomputation`() {
+        val paths = manySymbols(3)
+        val id = GraphNodeId.Structural(paths.last())
+        val unseeded = layoutVisibleGraph(visibleGraph(paths))
+        val seeded = layoutVisibleGraph(
+            visibleGraph(paths),
+            seeds = mapOf(id to LayoutPoint(600f, 600f)),
         )
 
-        val layout = layoutVisibleGraph(visibleGraph(paths))
-
-        val rects = layout.bounds.values.toList()
-        for (i in rects.indices) for (j in i + 1 until rects.size) {
-            assertFalse(rects[i].overlaps(rects[j]))
-        }
+        assertFalse(unseeded.centerOf(id) == seeded.centerOf(id))
     }
 
     @Test
-    fun `external nodes sit right of all structural bounds`() {
-        val externals = listOf(
-            ExternalNode(ExternalSymbolId("kotlin/io/println", "println")),
-            ExternalNode(ExternalSymbolId("java/util/List", "List")),
-        )
+    fun `manual center override reroutes only render coordinates`() {
+        val layout = layoutVisibleGraph(visibleGraph(manySymbols(3)))
+        val id = layout.bounds.keys.first()
+        val moved = layout.withCenters(mapOf(id to LayoutPoint(-40f, 25f)))
 
-        val layout = layoutVisibleGraph(visibleGraph(manySymbols(6), externals))
-
-        val structuralRight = layout.bounds
-            .filterKeys { it is GraphNodeId.Structural }
-            .values.maxOf { it.right }
-        val externalRects = layout.bounds.filterKeys { it is GraphNodeId.External }.values
-        assertEquals(2, externalRects.size)
-        assertTrue(externalRects.all { it.x >= structuralRight })
-        val sorted = externalRects.sortedBy { it.y }
-        assertFalse(sorted[0].overlaps(sorted[1]))
+        assertEquals(LayoutPoint(-40f, 25f), moved.centerOf(id))
+        assertNotSame(layout, moved)
     }
 
     @Test
@@ -126,5 +113,11 @@ class GraphLayoutTest {
         assertTrue(layout.bounds.isEmpty())
         assertEquals(0f, layout.width)
         assertEquals(0f, layout.height)
+    }
+
+    private fun GraphLayout.distance(source: GraphNodeId, target: GraphNodeId): Float {
+        val a = centerOf(source)!!
+        val b = centerOf(target)!!
+        return hypot((a.x - b.x).toDouble(), (a.y - b.y).toDouble()).toFloat()
     }
 }
