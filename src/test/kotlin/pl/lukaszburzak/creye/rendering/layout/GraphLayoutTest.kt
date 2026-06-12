@@ -17,6 +17,7 @@ import pl.lukaszburzak.creye.domain.identity.NodePath
 import pl.lukaszburzak.creye.domain.identity.NodeSegment
 import pl.lukaszburzak.creye.rendering.projection.VisibleEdge
 import pl.lukaszburzak.creye.rendering.projection.VisibleGraph
+import pl.lukaszburzak.creye.rendering.projection.VisibleHierarchyEdge
 import pl.lukaszburzak.creye.rendering.projection.VisibleNode
 import kotlin.math.hypot
 
@@ -32,13 +33,23 @@ class GraphLayoutTest {
         paths: List<NodePath>,
         externals: List<ExternalNode> = emptyList(),
         edges: List<VisibleEdge> = emptyList(),
-    ) = VisibleGraph(
-        structuralNodes = paths.map {
+    ): VisibleGraph {
+        val structuralNodes = paths.map {
             VisibleNode(StructuralNode(it, it.displayName(), change = null), isCollapsed = false, internalizedEdges = emptySet())
-        },
-        externalNodes = externals,
-        edges = edges,
-    )
+        }
+        val visiblePaths = paths.toSet()
+        val hierarchyEdges = paths.mapNotNull { path ->
+            val parent = path.parent() ?: return@mapNotNull null
+            if (parent !in visiblePaths) return@mapNotNull null
+            VisibleHierarchyEdge(GraphNodeId.Structural(parent), GraphNodeId.Structural(path))
+        }
+        return VisibleGraph(
+            structuralNodes = structuralNodes,
+            externalNodes = externals,
+            edges = edges,
+            hierarchyEdges = hierarchyEdges,
+        )
+    }
 
     private fun manySymbols(count: Int): List<NodePath> =
         listOf(path(module), path(module, pkg), file) +
@@ -93,11 +104,11 @@ class GraphLayoutTest {
     }
 
     @Test
-    fun `children of a hidden expanded parent are seeded as a cluster`() {
+    fun `children of a visible expanded parent are seeded as a cluster`() {
         val packageA = path(module, NodeSegment.Package("com.a"))
         val packageB = path(module, NodeSegment.Package("com.b"))
         val parent = path(module)
-        val graph = visibleGraph(listOf(packageA, packageB))
+        val graph = visibleGraph(listOf(parent, packageA, packageB))
 
         val layout = seedVisibleGraphLayout(
             graph,
@@ -105,6 +116,8 @@ class GraphLayoutTest {
         )
 
         assertTrue(layout.distance(GraphNodeId.Structural(packageA), GraphNodeId.Structural(packageB)) < 90f)
+        assertTrue(layout.distance(GraphNodeId.Structural(parent), GraphNodeId.Structural(packageA)) < 80f)
+        assertTrue(layout.distance(GraphNodeId.Structural(parent), GraphNodeId.Structural(packageB)) < 80f)
     }
 
     @Test
@@ -187,4 +200,7 @@ class GraphLayoutTest {
         val b = centerOf(target)!!
         return hypot((a.x - b.x).toDouble(), (a.y - b.y).toDouble()).toFloat()
     }
+
+    private fun NodePath.parent(): NodePath? =
+        if (segments.size <= 1) null else NodePath(segments.subList(0, segments.size - 1))
 }

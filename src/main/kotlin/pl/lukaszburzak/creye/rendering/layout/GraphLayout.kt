@@ -254,10 +254,8 @@ private fun initialPositions(
     visible: VisibleGraph,
 ): MutableMap<GraphNodeId, MutablePoint> {
     val result = linkedMapOf<GraphNodeId, MutablePoint>()
-    val visibleStructural = visible.structuralNodes.mapTo(mutableSetOf()) { it.node.path }
-    val clusterGroups = visible.structuralNodes
-        .map { it.node.path }
-        .groupBy { path -> path.clusterParent(visibleStructural) }
+    val hierarchyParentByChild = visible.hierarchyEdges.associate { it.child.path to it.parent.path }
+    val clusterGroups = visible.hierarchyEdges.groupBy({ it.parent.path }, { it.child.path })
     ids.forEachIndexed { index, id ->
         val seed = seeds[id]
         if (seed != null) {
@@ -266,7 +264,7 @@ private fun initialPositions(
             val clusterSeed = (id as? GraphNodeId.Structural)
                 ?.path
                 ?.let { path ->
-                    val parent = path.clusterParent(visibleStructural) ?: return@let null
+                    val parent = hierarchyParentByChild[path] ?: return@let null
                     val parentSeed = seeds[GraphNodeId.Structural(parent)] ?: return@let null
                     val siblings = clusterGroups[parent].orEmpty().sortedBy { it.sortKey() }
                     val siblingIndex = siblings.indexOf(path).takeIf { it >= 0 } ?: index
@@ -296,31 +294,23 @@ private fun forceEdges(visible: VisibleGraph): List<ForceEdge> {
             weight = max(1f, sqrt(it.underlying.size.toFloat())),
         )
     }
-    val visibleStructural = visible.structuralNodes.mapTo(mutableSetOf()) { it.node.path }
-    val structuralEdges = visible.structuralNodes.mapNotNull { node ->
-        val parent = node.node.path.parent() ?: return@mapNotNull null
-        if (parent !in visibleStructural) return@mapNotNull null
+    val structuralEdges = visible.hierarchyEdges.map { edge ->
         ForceEdge(
-            source = GraphNodeId.Structural(parent),
-            target = GraphNodeId.Structural(node.node.path),
+            source = edge.parent,
+            target = edge.child,
             length = LayoutMetrics.STRUCTURAL_EDGE_LENGTH,
             weight = 0.35f,
         )
     }
-    val clusterEdges = childClusterEdges(visible, visibleStructural)
+    val clusterEdges = childClusterEdges(visible)
     return dependencyEdges + structuralEdges + clusterEdges
 }
 
-private fun childClusterEdges(
-    visible: VisibleGraph,
-    visibleStructural: Set<NodePath>,
-): List<ForceEdge> {
+private fun childClusterEdges(visible: VisibleGraph): List<ForceEdge> {
     val edges = mutableListOf<ForceEdge>()
-    val groups = visible.structuralNodes
-        .map { it.node.path }
-        .groupBy { it.clusterParent(visibleStructural) }
-    for ((parent, children) in groups) {
-        if (parent == null || children.size < 2) continue
+    val groups = visible.hierarchyEdges.groupBy({ it.parent.path }, { it.child.path })
+    for (children in groups.values) {
+        if (children.size < 2) continue
         val sortedChildren = children.sortedBy { it.sortKey() }
         for (i in sortedChildren.indices) {
             for (j in i + 1 until sortedChildren.size) {
@@ -435,12 +425,6 @@ private fun iterationsFor(nodeCount: Int): Int = when {
     nodeCount < 64 -> 240
     else -> 320
 }
-
-private fun NodePath.parent(): NodePath? =
-    if (segments.size <= 1) null else NodePath(segments.subList(0, segments.size - 1))
-
-private fun NodePath.clusterParent(visibleStructural: Set<NodePath>): NodePath? =
-    parent()?.takeIf { it !in visibleStructural }
 
 private fun NodePath.sortKey(): String = segments.joinToString("/") { it.toString() }
 

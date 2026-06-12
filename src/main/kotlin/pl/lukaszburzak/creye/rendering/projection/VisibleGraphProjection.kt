@@ -31,10 +31,21 @@ data class VisibleEdge(
     val underlying: Set<DependencyEdge>,
 )
 
+/**
+ * Render-derived parent-child connection between two visible structural nodes.
+ * This is hierarchy evidence only; dependency classification and underlying-edge
+ * traceability stay exclusively on [VisibleEdge].
+ */
+data class VisibleHierarchyEdge(
+    val parent: GraphNodeId.Structural,
+    val child: GraphNodeId.Structural,
+)
+
 data class VisibleGraph(
     val structuralNodes: List<VisibleNode>,
     val externalNodes: List<ExternalNode>,
     val edges: List<VisibleEdge>,
+    val hierarchyEdges: List<VisibleHierarchyEdge> = emptyList(),
 )
 
 /**
@@ -73,24 +84,33 @@ fun projectVisibleGraph(graph: DependencyGraph, expanded: Set<NodePath>): Visibl
         .map { node ->
             VisibleNode(
                 node = node,
-                isCollapsed = childrenByParent[node.path].orEmpty().isNotEmpty(),
+                isCollapsed = node.path !in expanded && childrenByParent[node.path].orEmpty().isNotEmpty(),
                 internalizedEdges = internalized[node.path].orEmpty(),
             )
         }
+    val hierarchyEdges = structuralNodes.mapNotNull { node ->
+        val parent = node.node.path.parent() ?: return@mapNotNull null
+        if (parent !in visiblePaths) return@mapNotNull null
+        VisibleHierarchyEdge(
+            parent = GraphNodeId.Structural(parent),
+            child = GraphNodeId.Structural(node.node.path),
+        )
+    }
 
     return VisibleGraph(
         structuralNodes = structuralNodes,
         externalNodes = graph.externalNodes,
         edges = edges,
+        hierarchyEdges = hierarchyEdges,
     )
 }
 
 /**
- * Visible iff all proper ancestors are expanded and the node itself is not expanded.
- * Expanding a node therefore hides it and reveals its direct children.
+ * Visible iff all proper ancestors are expanded. Expanding a node keeps it visible
+ * while revealing its direct children as the next frontier.
  */
 private fun NodePath.isVisible(expanded: Set<NodePath>): Boolean =
-    this !in expanded && properAncestors().all { it in expanded }
+    properAncestors().all { it in expanded }
 
 /**
  * The nearest visible representative is the deepest materialized visible ancestor.

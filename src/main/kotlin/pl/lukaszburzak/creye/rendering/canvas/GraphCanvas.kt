@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.scale
@@ -53,6 +54,7 @@ private object Palette {
     val externalEdge = Color(0xFFAB47BC)
     val cohesionEdge = Color(0xFFFF7043)
     val multiClassEdge = Color(0xFF90A4AE)
+    val hierarchyEdge = Color(0xFFB0BEC5)
     val badgeFill = Color(0xFF455A64)
     val diagnosticMarker = Color(0xFFFFC107)
     val label = Color(0xFFECEFF1)
@@ -193,11 +195,30 @@ fun GraphCanvas(
         } else {
             translate(pan.x, pan.y) {
                 scale(zoom, zoom, Offset.Zero) {
+                    drawHierarchyEdges(visible, layout)
                     drawEdges(visible, layout)
                     drawNodes(visible, layout, selected, diagnosticNodes, textMeasurer, labelMeasurements)
                 }
             }
         }
+    }
+}
+
+private fun DrawScope.drawHierarchyEdges(visible: VisibleGraph, layout: GraphLayout) {
+    val dash = PathEffect.dashPathEffect(floatArrayOf(7f, 5f), 0f)
+    for (edge in visible.hierarchyEdges) {
+        val parent = layout.bounds[edge.parent] ?: continue
+        val child = layout.bounds[edge.child] ?: continue
+        val from = parent.center.toOffset()
+        val to = child.center.toOffset()
+        if (from == to) continue
+        drawLine(
+            Palette.hierarchyEdge,
+            clipToCircle(from, to, LayoutMetrics.NODE_RADIUS),
+            clipToCircle(to, from, LayoutMetrics.NODE_RADIUS),
+            strokeWidth = 1.1f,
+            pathEffect = dash,
+        )
     }
 }
 

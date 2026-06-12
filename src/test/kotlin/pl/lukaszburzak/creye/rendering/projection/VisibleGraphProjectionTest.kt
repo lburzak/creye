@@ -80,16 +80,34 @@ class VisibleGraphProjectionTest {
     }
 
     @Test
-    fun `expanded node is hidden and its direct children become visible`() {
+    fun `expanded node remains visible and its direct children become visible`() {
         val graph = graphOf(listOf(edge(symbolA, GraphNodeId.Structural(symbolB))))
 
         val visible = projectVisibleGraph(graph, expanded = setOf(moduleA))
 
         val visiblePaths = visible.structuralNodes.map { it.node.path }
-        assertFalse(moduleA in visiblePaths)
+        assertTrue(moduleA in visiblePaths)
         assertTrue(packageA in visiblePaths)
         assertFalse(fileA in visiblePaths)
+        assertFalse(visible.structuralNodes.single { it.node.path == moduleA }.isCollapsed)
         assertTrue(visible.structuralNodes.single { it.node.path == packageA }.isCollapsed)
+    }
+
+    @Test
+    fun `visible hierarchy edges connect visible direct parents to children`() {
+        val graph = graphOf(listOf(edge(symbolA, GraphNodeId.Structural(symbolB))))
+
+        val visible = projectVisibleGraph(graph, expanded = setOf(moduleA))
+
+        assertEquals(
+            listOf(VisibleHierarchyEdge(GraphNodeId.Structural(moduleA), GraphNodeId.Structural(packageA))),
+            visible.hierarchyEdges,
+        )
+        assertTrue(visible.hierarchyEdges.none { hierarchy ->
+            visible.edges.any { dependency ->
+                dependency.source == hierarchy.parent && dependency.target == hierarchy.child
+            }
+        })
     }
 
     @Test
@@ -110,8 +128,17 @@ class VisibleGraphProjectionTest {
         val visible = projectVisibleGraph(graph, expanded = setOf(moduleA, packageA))
 
         assertEquals(GraphNodeId.Structural(fileA), visible.edges.single().source)
+        assertTrue(moduleA in visible.structuralNodes.map { it.node.path })
+        assertTrue(packageA in visible.structuralNodes.map { it.node.path })
         assertTrue(fileA in visible.structuralNodes.map { it.node.path })
-        assertFalse(packageA in visible.structuralNodes.map { it.node.path })
+        assertFalse(symbolA in visible.structuralNodes.map { it.node.path })
+        assertEquals(
+            setOf(
+                VisibleHierarchyEdge(GraphNodeId.Structural(moduleA), GraphNodeId.Structural(packageA)),
+                VisibleHierarchyEdge(GraphNodeId.Structural(packageA), GraphNodeId.Structural(fileA)),
+            ),
+            visible.hierarchyEdges.toSet(),
+        )
     }
 
     @Test

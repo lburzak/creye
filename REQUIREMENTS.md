@@ -14,7 +14,10 @@
   - Color based on diff
 - MUST expand on double-click
   - Children MUST be clustered
-  - Expanded node MUST NOT be visible
+  - Expanded node MUST remain visible
+  - Children MUST be connected to expanded node via edges
 - MUST collapse itself, and all siblings on right-click
 ## Edge
 - Edges of children MUST be conflated on ancestor
+- Dependency edges MUST preserve direction, classification, deduplication, and underlying-edge traceability while conflated
+- Hierarchy edges MUST be render-derived from visible parent-child structural nodes and MUST be visually distinct from dependency edges

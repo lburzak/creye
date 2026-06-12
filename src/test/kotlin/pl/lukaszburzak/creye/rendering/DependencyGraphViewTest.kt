@@ -21,6 +21,13 @@ class DependencyGraphViewTest {
     }
 
     @Test
+    fun `collapse visible expanded parent hides it and sibling frontier`() {
+        val expanded = setOf(module, pkg, fileA, otherPackage)
+
+        assertEquals(emptySet<NodePath>(), collapseSelfAndSiblings(expanded, pkg))
+    }
+
+    @Test
     fun `collapse root siblings clears root expansions`() {
         val lib = NodePath(listOf(NodeSegment.Module("lib")))
         val expanded = setOf(module, pkg, lib)
