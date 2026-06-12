@@ -74,14 +74,14 @@ object LayoutMetrics {
     const val MARGIN = 44f
 }
 
-private data class ForceEdge(
+internal data class LayoutForceEdge(
     val source: GraphNodeId,
     val target: GraphNodeId,
     val length: Float,
     val weight: Float,
 )
 
-private data class MutablePoint(var x: Float, var y: Float) {
+internal data class MutablePoint(var x: Float, var y: Float) {
     fun immutable(): LayoutPoint = LayoutPoint(x, y)
 }
 
@@ -100,7 +100,7 @@ fun layoutVisibleGraph(
     if (ids.isEmpty()) return GraphLayout(emptyMap(), width = 0f, height = 0f)
 
     val positions = initialPositions(ids, seeds, visible)
-    val edges = forceEdges(visible)
+    val edges = visible.layoutForceEdges()
     val centers = runCatching {
         gephiForceAtlas2(ids, positions, edges)
     }.getOrElse {
@@ -155,7 +155,7 @@ fun validateLayout(visible: VisibleGraph, layout: GraphLayout): LayoutValidation
 private fun localForceLayout(
     ids: List<GraphNodeId>,
     positions: MutableMap<GraphNodeId, MutablePoint>,
-    edges: List<ForceEdge>,
+    edges: List<LayoutForceEdge>,
 ): Map<GraphNodeId, LayoutPoint> {
     repeat(iterationsFor(ids.size)) {
         stepForceSimulation(ids, positions, edges)
@@ -166,7 +166,7 @@ private fun localForceLayout(
 private fun gephiForceAtlas2(
     ids: List<GraphNodeId>,
     positions: Map<GraphNodeId, MutablePoint>,
-    edges: List<ForceEdge>,
+    edges: List<LayoutForceEdge>,
 ): Map<GraphNodeId, LayoutPoint> {
     val graphModel = GraphModelImpl()
     val graph = graphModel.directedGraph
@@ -219,9 +219,10 @@ private fun gephiForceAtlas2(
 fun graphLayoutFromCenters(
     centers: Map<GraphNodeId, LayoutPoint>,
     normalize: Boolean = false,
+    resolveOverlap: Boolean = true,
 ): GraphLayout {
     if (centers.isEmpty()) return GraphLayout(emptyMap(), width = 0f, height = 0f)
-    val unstacked = centers.withoutStacking()
+    val unstacked = if (resolveOverlap) centers.withoutStacking() else centers
     val shifted = if (normalize) unstacked.normalized() else unstacked
     val bounds = shifted.mapValues { (_, center) ->
         LayoutRect(
@@ -238,7 +239,7 @@ fun graphLayoutFromCenters(
     )
 }
 
-private fun VisibleGraph.nodeIds(): List<GraphNodeId> {
+internal fun VisibleGraph.nodeIds(): List<GraphNodeId> {
     val structural = structuralNodes
         .map { GraphNodeId.Structural(it.node.path) }
         .sortedBy { it.path.sortKey() }
@@ -285,36 +286,36 @@ private fun initialPositions(
     return result
 }
 
-private fun forceEdges(visible: VisibleGraph): List<ForceEdge> {
-    val dependencyEdges = visible.edges.map {
-        ForceEdge(
+internal fun VisibleGraph.layoutForceEdges(): List<LayoutForceEdge> {
+    val dependencyEdges = edges.map {
+        LayoutForceEdge(
             source = it.source,
             target = it.target,
             length = LayoutMetrics.EDGE_LENGTH,
             weight = max(1f, sqrt(it.underlying.size.toFloat())),
         )
     }
-    val structuralEdges = visible.hierarchyEdges.map { edge ->
-        ForceEdge(
+    val structuralEdges = hierarchyEdges.map { edge ->
+        LayoutForceEdge(
             source = edge.parent,
             target = edge.child,
             length = LayoutMetrics.STRUCTURAL_EDGE_LENGTH,
             weight = 0.35f,
         )
     }
-    val clusterEdges = childClusterEdges(visible)
+    val clusterEdges = childClusterEdges(this)
     return dependencyEdges + structuralEdges + clusterEdges
 }
 
-private fun childClusterEdges(visible: VisibleGraph): List<ForceEdge> {
-    val edges = mutableListOf<ForceEdge>()
+private fun childClusterEdges(visible: VisibleGraph): List<LayoutForceEdge> {
+    val edges = mutableListOf<LayoutForceEdge>()
     val groups = visible.hierarchyEdges.groupBy({ it.parent.path }, { it.child.path })
     for (children in groups.values) {
         if (children.size < 2) continue
         val sortedChildren = children.sortedBy { it.sortKey() }
         for (i in sortedChildren.indices) {
             for (j in i + 1 until sortedChildren.size) {
-                edges += ForceEdge(
+                edges += LayoutForceEdge(
                     source = GraphNodeId.Structural(sortedChildren[i]),
                     target = GraphNodeId.Structural(sortedChildren[j]),
                     length = LayoutMetrics.CLUSTER_EDGE_LENGTH,
@@ -329,7 +330,7 @@ private fun childClusterEdges(visible: VisibleGraph): List<ForceEdge> {
 private fun stepForceSimulation(
     ids: List<GraphNodeId>,
     positions: MutableMap<GraphNodeId, MutablePoint>,
-    edges: List<ForceEdge>,
+    edges: List<LayoutForceEdge>,
 ) {
     val movement = ids.associateWithTo(linkedMapOf()) { MutablePoint(0f, 0f) }
 

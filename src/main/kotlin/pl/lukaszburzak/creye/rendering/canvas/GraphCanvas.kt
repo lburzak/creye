@@ -22,6 +22,7 @@ import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
@@ -82,7 +83,10 @@ fun GraphCanvas(
     onSelect: (GraphNodeId?) -> Unit,
     onExpand: (GraphNodeId.Structural) -> Unit,
     onCollapseSelfAndSiblings: (GraphNodeId.Structural) -> Unit,
-    onMoveNode: (GraphNodeId, LayoutPoint) -> Unit,
+    onNodeDragStart: (GraphNodeId) -> Unit,
+    onNodeDragged: (GraphNodeId, LayoutPoint, LayoutPoint) -> Unit,
+    onNodeDragEnd: (GraphNodeId?) -> Unit,
+    onViewportChanged: (Float, Float) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var pan by remember { mutableStateOf(Offset.Zero) }
@@ -104,7 +108,10 @@ fun GraphCanvas(
     val currentOnSelect by rememberUpdatedState(onSelect)
     val currentOnExpand by rememberUpdatedState(onExpand)
     val currentOnCollapseSelfAndSiblings by rememberUpdatedState(onCollapseSelfAndSiblings)
-    val currentOnMoveNode by rememberUpdatedState(onMoveNode)
+    val currentOnNodeDragStart by rememberUpdatedState(onNodeDragStart)
+    val currentOnNodeDragged by rememberUpdatedState(onNodeDragged)
+    val currentOnNodeDragEnd by rememberUpdatedState(onNodeDragEnd)
+    val currentOnViewportChanged by rememberUpdatedState(onViewportChanged)
 
     fun graphPosition(position: Offset): Offset =
         (position - pan).scaledBy(1f / zoom)
@@ -130,6 +137,7 @@ fun GraphCanvas(
     Canvas(
         modifier = modifier
             .fillMaxSize()
+            .onSizeChanged { currentOnViewportChanged(it.width.toFloat(), it.height.toFloat()) }
             .pointerInput(Unit) {
                 detectTapGestures(
                     onTap = { currentOnSelect(hit(it)) },
@@ -140,9 +148,18 @@ fun GraphCanvas(
             }
             .pointerInput(Unit) {
                 detectDragGestures(
-                    onDragStart = { dragTarget = hit(it) },
-                    onDragCancel = { dragTarget = null },
-                    onDragEnd = { dragTarget = null },
+                    onDragStart = {
+                        dragTarget = hit(it)
+                        dragTarget?.let(currentOnNodeDragStart)
+                    },
+                    onDragCancel = {
+                        currentOnNodeDragEnd(dragTarget)
+                        dragTarget = null
+                    },
+                    onDragEnd = {
+                        currentOnNodeDragEnd(dragTarget)
+                        dragTarget = null
+                    },
                     onDrag = { change, dragAmount ->
                         change.consume()
                         val target = dragTarget
@@ -150,12 +167,14 @@ fun GraphCanvas(
                             pan += dragAmount
                         } else {
                             currentLayout.centerOf(target)?.let { center ->
-                                currentOnMoveNode(
+                                val graphDelta = LayoutPoint(dragAmount.x / zoom, dragAmount.y / zoom)
+                                currentOnNodeDragged(
                                     target,
                                     LayoutPoint(
-                                        center.x + dragAmount.x / zoom,
-                                        center.y + dragAmount.y / zoom,
+                                        center.x + graphDelta.x,
+                                        center.y + graphDelta.y,
                                     ),
+                                    graphDelta,
                                 )
                             }
                         }
