@@ -9,7 +9,8 @@ import pl.lukaszburzak.creye.domain.graph.StructuralNode
 import pl.lukaszburzak.creye.domain.identity.NodePath
 
 /**
- * Render-facing structural node: [internalizedEdges] is the ADR-008 intrinsic
+ * Render-facing structural node: [isCollapsed] means the visible node has hidden
+ * children and can be expanded; [internalizedEdges] is the ADR-008 intrinsic
  * internal-dependency state, rendered as a badge rather than a self-loop edge.
  */
 data class VisibleNode(
@@ -38,13 +39,17 @@ data class VisibleGraph(
 
 /**
  * ADR-008 collapse aggregation: a pure projection from the ADR-007 domain graph and
- * the collapse state to the visible graph. Holds no state of its own; recomputed by
- * recomposition whenever [collapsed] changes (ADR-009).
+ * the expansion frontier to the visible graph. Holds no state of its own; recomputed
+ * by recomposition whenever [expanded] changes (ADR-009).
  */
-fun projectVisibleGraph(graph: DependencyGraph, collapsed: Set<NodePath>): VisibleGraph {
-    // ADR-007 guarantees full ancestor chains, so every lift target is materialized.
+fun projectVisibleGraph(graph: DependencyGraph, expanded: Set<NodePath>): VisibleGraph {
+    val structuralPaths = graph.structuralNodes.mapTo(linkedSetOf()) { it.path }
+    val childrenByParent = structuralPaths.groupBy { it.parent() }
+    val visiblePaths = structuralPaths
+        .filterTo(linkedSetOf()) { path -> path.isVisible(expanded) }
+
     val lifted = graph.edges.groupBy { edge ->
-        edge.source.liftTo(collapsed) to edge.target.liftTo(collapsed)
+        edge.source.liftTo(visiblePaths) to edge.target.liftTo(visiblePaths)
     }
 
     val internalized = mutableMapOf<NodePath, MutableSet<DependencyEdge>>()
@@ -64,11 +69,11 @@ fun projectVisibleGraph(graph: DependencyGraph, collapsed: Set<NodePath>): Visib
     }
 
     val structuralNodes = graph.structuralNodes
-        .filter { it.path.isVisible(collapsed) }
+        .filter { it.path in visiblePaths }
         .map { node ->
             VisibleNode(
                 node = node,
-                isCollapsed = node.path in collapsed,
+                isCollapsed = childrenByParent[node.path].orEmpty().isNotEmpty(),
                 internalizedEdges = internalized[node.path].orEmpty(),
             )
         }
@@ -80,22 +85,37 @@ fun projectVisibleGraph(graph: DependencyGraph, collapsed: Set<NodePath>): Visib
     )
 }
 
-/** Visible iff no proper ancestor is collapsed; a collapsed node itself stays visible. */
-private fun NodePath.isVisible(collapsed: Set<NodePath>): Boolean =
-    properAncestors().none { it in collapsed }
+/**
+ * Visible iff all proper ancestors are expanded and the node itself is not expanded.
+ * Expanding a node therefore hides it and reveals its direct children.
+ */
+private fun NodePath.isVisible(expanded: Set<NodePath>): Boolean =
+    this !in expanded && properAncestors().all { it in expanded }
 
 /**
- * The nearest visible representative: the outermost collapsed proper ancestor if any,
- * else the path itself. Outermost wins because deeper collapsed ancestors are hidden.
+ * The nearest visible representative is the deepest materialized visible ancestor.
+ * ADR-007 guarantees full ancestor chains for dependency endpoints, so child edges
+ * can be conflated onto the current visible ancestor frontier.
  */
-private fun NodePath.liftTo(collapsed: Set<NodePath>): GraphNodeId.Structural =
-    GraphNodeId.Structural(properAncestors().firstOrNull { it in collapsed } ?: this)
+private fun NodePath.liftTo(visiblePaths: Set<NodePath>): GraphNodeId.Structural =
+    GraphNodeId.Structural(
+        ancestorsAndSelf()
+            .lastOrNull { it in visiblePaths }
+            ?: this,
+    )
 
-private fun GraphNodeId.liftTo(collapsed: Set<NodePath>): GraphNodeId = when (this) {
-    is GraphNodeId.Structural -> path.liftTo(collapsed)
+private fun GraphNodeId.liftTo(visiblePaths: Set<NodePath>): GraphNodeId = when (this) {
+    is GraphNodeId.Structural -> path.liftTo(visiblePaths)
     is GraphNodeId.External -> this
 }
 
 /** Proper ancestors ordered outermost first (module → … → parent). */
 private fun NodePath.properAncestors(): Sequence<NodePath> =
     (1 until segments.size).asSequence().map { NodePath(segments.subList(0, it)) }
+
+/** Ancestors ordered outermost first and including this path. */
+private fun NodePath.ancestorsAndSelf(): Sequence<NodePath> =
+    (1..segments.size).asSequence().map { NodePath(segments.subList(0, it)) }
+
+private fun NodePath.parent(): NodePath? =
+    if (segments.size <= 1) null else NodePath(segments.subList(0, segments.size - 1))

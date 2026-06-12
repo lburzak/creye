@@ -37,13 +37,15 @@ private val layoutWarningColor = Color(0xFFFFB300)
  */
 @Composable
 fun DependencyGraphView(graph: DependencyGraph, modifier: Modifier = Modifier) {
-    var collapsed by remember(graph) { mutableStateOf(emptySet<NodePath>()) }
+    var expanded by remember(graph) { mutableStateOf(emptySet<NodePath>()) }
     var selected by remember(graph) { mutableStateOf<GraphNodeId?>(null) }
     var movedCenters by remember(graph) { mutableStateOf(emptyMap<GraphNodeId, LayoutPoint>()) }
     var layoutState by remember(graph) { mutableStateOf<GraphLayoutState?>(null) }
 
-    val visible = remember(graph, collapsed) { projectVisibleGraph(graph, collapsed) }
-    val seedLayout = remember(visible) { seedVisibleGraphLayout(visible, movedCenters) }
+    val visible = remember(graph, expanded) { projectVisibleGraph(graph, expanded) }
+    val seedLayout = remember(visible, layoutState, movedCenters) {
+        seedVisibleGraphLayout(visible, layoutState?.layout?.centers().orEmpty() + movedCenters)
+    }
     val activeLayoutState = layoutState?.takeIf { it.visible == visible }
         ?: GraphLayoutState(visible, seedLayout, isComputing = true, messages = validateLayout(visible, seedLayout).messages)
     val layout = remember(activeLayoutState.layout, movedCenters) { activeLayoutState.layout.withCenters(movedCenters) }
@@ -90,8 +92,8 @@ fun DependencyGraphView(graph: DependencyGraph, modifier: Modifier = Modifier) {
             selected = selected,
             diagnosticNodes = diagnosticNodes,
             onSelect = { selected = it },
-            onExpand = { id -> collapsed = collapsed - id.path },
-            onCollapseSelfAndSiblings = { id -> collapsed = collapsed + collapseSelfAndSiblings(graph, id.path) },
+            onExpand = { id -> expanded = expanded + id.path },
+            onCollapseSelfAndSiblings = { id -> expanded = collapseSelfAndSiblings(expanded, id.path) },
             onMoveNode = { id, center -> movedCenters = movedCenters + (id to center) },
             modifier = Modifier.weight(1f),
         )
@@ -105,15 +107,21 @@ fun DependencyGraphView(graph: DependencyGraph, modifier: Modifier = Modifier) {
     }
 }
 
-internal fun collapseSelfAndSiblings(graph: DependencyGraph, path: NodePath): Set<NodePath> {
+internal fun collapseSelfAndSiblings(expanded: Set<NodePath>, path: NodePath): Set<NodePath> {
     val parent = path.parent()
-    return graph.structuralNodes
-        .map { it.path }
-        .filterTo(mutableSetOf()) { it.parent() == parent }
+    return if (parent == null) {
+        emptySet()
+    } else {
+        expanded.filterNotTo(mutableSetOf()) { it == parent || it.isDescendantOf(parent) }
+    }
 }
 
 private fun NodePath.parent(): NodePath? =
     if (segments.size <= 1) null else NodePath(segments.subList(0, segments.size - 1))
+
+private fun NodePath.isDescendantOf(ancestor: NodePath): Boolean =
+    segments.size > ancestor.segments.size &&
+        segments.take(ancestor.segments.size) == ancestor.segments
 
 private data class GraphLayoutState(
     val visible: VisibleGraph,

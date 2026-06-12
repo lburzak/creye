@@ -77,6 +77,37 @@ class GraphLayoutTest {
     }
 
     @Test
+    fun `nodes seeded at the same point are separated to avoid stacking`() {
+        val paths = manySymbols(5)
+        val seeds: Map<GraphNodeId, LayoutPoint> =
+            paths.associate { GraphNodeId.Structural(it) as GraphNodeId to LayoutPoint(0f, 0f) }
+
+        val layout = layoutVisibleGraph(visibleGraph(paths), seeds)
+        val rects = layout.bounds.values.toList()
+
+        for (i in rects.indices) {
+            for (j in i + 1 until rects.size) {
+                assertFalse("rects[$i] overlaps rects[$j]", rects[i].overlaps(rects[j]))
+            }
+        }
+    }
+
+    @Test
+    fun `children of a hidden expanded parent are seeded as a cluster`() {
+        val packageA = path(module, NodeSegment.Package("com.a"))
+        val packageB = path(module, NodeSegment.Package("com.b"))
+        val parent = path(module)
+        val graph = visibleGraph(listOf(packageA, packageB))
+
+        val layout = seedVisibleGraphLayout(
+            graph,
+            seeds = mapOf(GraphNodeId.Structural(parent) to LayoutPoint(400f, 400f)),
+        )
+
+        assertTrue(layout.distance(GraphNodeId.Structural(packageA), GraphNodeId.Structural(packageB)) < 90f)
+    }
+
+    @Test
     fun `layout uses seed positions for stable recomputation`() {
         val paths = manySymbols(3)
         val id = GraphNodeId.Structural(paths.last())

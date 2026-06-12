@@ -70,6 +70,7 @@ object LayoutMetrics {
     const val NODE_DIAMETER = NODE_RADIUS * 2f
     const val EDGE_LENGTH = 118f
     const val STRUCTURAL_EDGE_LENGTH = 82f
+    const val CLUSTER_EDGE_LENGTH = 58f
     const val MARGIN = 44f
 }
 
@@ -98,7 +99,7 @@ fun layoutVisibleGraph(
     val ids = visible.nodeIds()
     if (ids.isEmpty()) return GraphLayout(emptyMap(), width = 0f, height = 0f)
 
-    val positions = initialPositions(ids, seeds)
+    val positions = initialPositions(ids, seeds, visible)
     val edges = forceEdges(visible)
     val centers = runCatching {
         gephiForceAtlas2(ids, positions, edges)
@@ -114,7 +115,7 @@ fun seedVisibleGraphLayout(
 ): GraphLayout {
     val ids = visible.nodeIds()
     if (ids.isEmpty()) return GraphLayout(emptyMap(), width = 0f, height = 0f)
-    val centers = initialPositions(ids, seeds).mapValues { it.value.immutable() }
+    val centers = initialPositions(ids, seeds, visible).mapValues { it.value.immutable() }
     return graphLayoutFromCenters(centers, normalize = true)
 }
 
@@ -197,7 +198,7 @@ private fun gephiForceAtlas2(
 
     val forceAtlas = ForceAtlas2Builder().buildLayout()
     forceAtlas.setGraphModel(graphModel)
-    forceAtlas.setAdjustSizes(false)
+    forceAtlas.setAdjustSizes(true)
     forceAtlas.setBarnesHutOptimize(ids.size >= BARNES_HUT_THRESHOLD)
     forceAtlas.setEdgeWeightInfluence(1.0)
     forceAtlas.setGravity(1.0)
@@ -220,7 +221,8 @@ fun graphLayoutFromCenters(
     normalize: Boolean = false,
 ): GraphLayout {
     if (centers.isEmpty()) return GraphLayout(emptyMap(), width = 0f, height = 0f)
-    val shifted = if (normalize) centers.normalized() else centers
+    val unstacked = centers.withoutStacking()
+    val shifted = if (normalize) unstacked.normalized() else unstacked
     val bounds = shifted.mapValues { (_, center) ->
         LayoutRect(
             x = center.x - LayoutMetrics.NODE_RADIUS,
@@ -249,16 +251,37 @@ private fun VisibleGraph.nodeIds(): List<GraphNodeId> {
 private fun initialPositions(
     ids: List<GraphNodeId>,
     seeds: Map<GraphNodeId, LayoutPoint>,
+    visible: VisibleGraph,
 ): MutableMap<GraphNodeId, MutablePoint> {
     val result = linkedMapOf<GraphNodeId, MutablePoint>()
+    val visibleStructural = visible.structuralNodes.mapTo(mutableSetOf()) { it.node.path }
+    val clusterGroups = visible.structuralNodes
+        .map { it.node.path }
+        .groupBy { path -> path.clusterParent(visibleStructural) }
     ids.forEachIndexed { index, id ->
         val seed = seeds[id]
         if (seed != null) {
             result[id] = MutablePoint(seed.x, seed.y)
         } else {
-            val angle = index * GOLDEN_ANGLE
-            val radius = 36f + sqrt(index + 1f) * 52f
-            result[id] = MutablePoint(radius * cos(angle), radius * sin(angle))
+            val clusterSeed = (id as? GraphNodeId.Structural)
+                ?.path
+                ?.let { path ->
+                    val parent = path.clusterParent(visibleStructural) ?: return@let null
+                    val parentSeed = seeds[GraphNodeId.Structural(parent)] ?: return@let null
+                    val siblings = clusterGroups[parent].orEmpty().sortedBy { it.sortKey() }
+                    val siblingIndex = siblings.indexOf(path).takeIf { it >= 0 } ?: index
+                    val angle = siblingIndex * GOLDEN_ANGLE
+                    val radius = CLUSTER_SEED_RADIUS + sqrt(siblingIndex + 1f) * 8f
+                    MutablePoint(
+                        parentSeed.x + radius * cos(angle),
+                        parentSeed.y + radius * sin(angle),
+                    )
+                }
+            result[id] = clusterSeed ?: run {
+                val angle = index * GOLDEN_ANGLE
+                val radius = 36f + sqrt(index + 1f) * 52f
+                MutablePoint(radius * cos(angle), radius * sin(angle))
+            }
         }
     }
     return result
@@ -284,7 +307,33 @@ private fun forceEdges(visible: VisibleGraph): List<ForceEdge> {
             weight = 0.35f,
         )
     }
-    return dependencyEdges + structuralEdges
+    val clusterEdges = childClusterEdges(visible, visibleStructural)
+    return dependencyEdges + structuralEdges + clusterEdges
+}
+
+private fun childClusterEdges(
+    visible: VisibleGraph,
+    visibleStructural: Set<NodePath>,
+): List<ForceEdge> {
+    val edges = mutableListOf<ForceEdge>()
+    val groups = visible.structuralNodes
+        .map { it.node.path }
+        .groupBy { it.clusterParent(visibleStructural) }
+    for ((parent, children) in groups) {
+        if (parent == null || children.size < 2) continue
+        val sortedChildren = children.sortedBy { it.sortKey() }
+        for (i in sortedChildren.indices) {
+            for (j in i + 1 until sortedChildren.size) {
+                edges += ForceEdge(
+                    source = GraphNodeId.Structural(sortedChildren[i]),
+                    target = GraphNodeId.Structural(sortedChildren[j]),
+                    length = LayoutMetrics.CLUSTER_EDGE_LENGTH,
+                    weight = 0.55f,
+                )
+            }
+        }
+    }
+    return edges
 }
 
 private fun stepForceSimulation(
@@ -345,6 +394,36 @@ private fun Map<GraphNodeId, LayoutPoint>.normalized(): Map<GraphNodeId, LayoutP
     return mapValues { (_, center) -> LayoutPoint(center.x + dx, center.y + dy) }
 }
 
+private fun Map<GraphNodeId, LayoutPoint>.withoutStacking(): Map<GraphNodeId, LayoutPoint> {
+    if (size < 2) return this
+    val ids = keys.sortedBy { it.stableId() }
+    val points = mapValuesTo(linkedMapOf()) { (_, center) -> MutablePoint(center.x, center.y) }
+    var iteration = 0
+    while (iteration < OVERLAP_RESOLUTION_ITERATIONS) {
+        var changed = false
+        for (i in ids.indices) {
+            for (j in i + 1 until ids.size) {
+                val a = points.getValue(ids[i])
+                val b = points.getValue(ids[j])
+                val vector = resolvedVector(a.x - b.x, a.y - b.y, i * 31 + j)
+                val distance = max(0.001f, sqrt(vector.x * vector.x + vector.y * vector.y))
+                if (distance >= MIN_NODE_DISTANCE) continue
+                val push = (MIN_NODE_DISTANCE - distance) / 2f
+                val dx = vector.x / distance * push
+                val dy = vector.y / distance * push
+                a.x += dx
+                a.y += dy
+                b.x -= dx
+                b.y -= dy
+                changed = true
+            }
+        }
+        if (!changed) break
+        iteration++
+    }
+    return points.mapValues { it.value.immutable() }
+}
+
 private fun resolvedVector(x: Float, y: Float, salt: Int): LayoutPoint {
     if (x != 0f || y != 0f) return LayoutPoint(x, y)
     val angle = (salt and 0xFFFF) * GOLDEN_ANGLE
@@ -360,6 +439,9 @@ private fun iterationsFor(nodeCount: Int): Int = when {
 private fun NodePath.parent(): NodePath? =
     if (segments.size <= 1) null else NodePath(segments.subList(0, segments.size - 1))
 
+private fun NodePath.clusterParent(visibleStructural: Set<NodePath>): NodePath? =
+    parent()?.takeIf { it !in visibleStructural }
+
 private fun NodePath.sortKey(): String = segments.joinToString("/") { it.toString() }
 
 private fun GraphNodeId.stableId(): String = when (this) {
@@ -373,5 +455,8 @@ private const val REPULSION = 4_800f
 private const val SPRING = 0.026f
 private const val GRAVITY = 0.006f
 private const val MAX_STEP = 9f
+private const val CLUSTER_SEED_RADIUS = 34f
+private const val MIN_NODE_DISTANCE = LayoutMetrics.NODE_DIAMETER + 8f
+private const val OVERLAP_RESOLUTION_ITERATIONS = 96
 private const val BARNES_HUT_THRESHOLD = 64
 private const val GOLDEN_ANGLE = (PI * (3.0 - 2.23606797749979)).toFloat()

@@ -59,65 +59,70 @@ class VisibleGraphProjectionTest {
     }
 
     @Test
-    fun `fully expanded projection reproduces domain edges unchanged`() {
+    fun `collapsed projection shows roots and conflates child edges onto ancestors`() {
         val domainEdges = listOf(
             edge(symbolA, GraphNodeId.Structural(symbolB)),
             edge(symbolA, GraphNodeId.External(external), DependencyClassification.EXTERNAL),
         )
         val graph = graphOf(domainEdges, listOf(ExternalNode(external)))
 
-        val visible = projectVisibleGraph(graph, collapsed = emptySet())
+        val visible = projectVisibleGraph(graph, expanded = emptySet())
 
-        assertEquals(graph.structuralNodes.size, visible.structuralNodes.size)
-        assertTrue(visible.structuralNodes.none { it.isCollapsed })
-        assertTrue(visible.structuralNodes.all { it.internalizedEdges.isEmpty() })
+        assertEquals(setOf(moduleA, moduleB), visible.structuralNodes.map { it.node.path }.toSet())
+        assertTrue(visible.structuralNodes.all { it.isCollapsed })
         assertEquals(
-            domainEdges.map { Triple(GraphNodeId.Structural(it.source), it.target, setOf(it)) }.toSet(),
+            setOf(
+                Triple(GraphNodeId.Structural(moduleA), GraphNodeId.Structural(moduleB), setOf(domainEdges[0])),
+                Triple(GraphNodeId.Structural(moduleA), GraphNodeId.External(external), setOf(domainEdges[1])),
+            ),
             visible.edges.map { Triple(it.source, it.target, it.underlying) }.toSet(),
         )
     }
 
     @Test
-    fun `endpoints lift to nearest visible ancestor on both sides`() {
+    fun `expanded node is hidden and its direct children become visible`() {
         val graph = graphOf(listOf(edge(symbolA, GraphNodeId.Structural(symbolB))))
 
-        val visible = projectVisibleGraph(graph, collapsed = setOf(fileA, moduleB))
+        val visible = projectVisibleGraph(graph, expanded = setOf(moduleA))
+
+        val visiblePaths = visible.structuralNodes.map { it.node.path }
+        assertFalse(moduleA in visiblePaths)
+        assertTrue(packageA in visiblePaths)
+        assertFalse(fileA in visiblePaths)
+        assertTrue(visible.structuralNodes.single { it.node.path == packageA }.isCollapsed)
+    }
+
+    @Test
+    fun `endpoints lift to deepest visible ancestor on both sides`() {
+        val graph = graphOf(listOf(edge(symbolA, GraphNodeId.Structural(symbolB))))
+
+        val visible = projectVisibleGraph(graph, expanded = setOf(moduleA, packageA, moduleB, packageB))
 
         val edge = visible.edges.single()
         assertEquals(GraphNodeId.Structural(fileA), edge.source)
-        assertEquals(GraphNodeId.Structural(moduleB), edge.target)
+        assertEquals(GraphNodeId.Structural(fileB), edge.target)
     }
 
     @Test
-    fun `outermost collapsed ancestor wins over nested collapsed ancestor`() {
+    fun `nested expanded ancestor reveals next frontier`() {
         val graph = graphOf(listOf(edge(symbolA, GraphNodeId.Structural(symbolB))))
 
-        val visible = projectVisibleGraph(graph, collapsed = setOf(packageA, fileA))
+        val visible = projectVisibleGraph(graph, expanded = setOf(moduleA, packageA))
 
-        assertEquals(GraphNodeId.Structural(packageA), visible.edges.single().source)
+        assertEquals(GraphNodeId.Structural(fileA), visible.edges.single().source)
+        assertTrue(fileA in visible.structuralNodes.map { it.node.path })
+        assertFalse(packageA in visible.structuralNodes.map { it.node.path })
     }
 
     @Test
-    fun `hidden descendants of collapsed node are not visible`() {
-        val graph = graphOf(listOf(edge(symbolA, GraphNodeId.Structural(symbolB))))
-
-        val visible = projectVisibleGraph(graph, collapsed = setOf(fileA))
-
-        val visiblePaths = visible.structuralNodes.map { it.node.path }
-        assertTrue(fileA in visiblePaths)
-        assertFalse(symbolA in visiblePaths)
-        assertTrue(visible.structuralNodes.single { it.node.path == fileA }.isCollapsed)
-    }
-
-    @Test
-    fun `same node lift becomes badge not edge`() {
+    fun `same visible ancestor lift becomes badge not edge`() {
         val internalEdge = edge(symbolA, GraphNodeId.Structural(symbolA2), DependencyClassification.COHESION)
         val graph = graphOf(listOf(internalEdge))
 
-        val visible = projectVisibleGraph(graph, collapsed = setOf(fileA))
+        val visible = projectVisibleGraph(graph, expanded = emptySet())
 
         assertTrue(visible.edges.isEmpty())
-        val badge = visible.structuralNodes.single { it.node.path == fileA }.internalizedEdges
+        val badge = visible.structuralNodes.single { it.node.path == moduleA }.internalizedEdges
         assertEquals(setOf(internalEdge), badge)
     }
 
@@ -127,12 +132,12 @@ class VisibleGraphProjectionTest {
         val bToA = edge(symbolB, GraphNodeId.Structural(symbolA))
         val graph = graphOf(listOf(aToB, bToA))
 
-        val visible = projectVisibleGraph(graph, collapsed = setOf(fileA, fileB))
+        val visible = projectVisibleGraph(graph, expanded = emptySet())
 
         assertEquals(2, visible.edges.size)
         val pairs = visible.edges.map { it.source to it.target }.toSet()
-        assertTrue(GraphNodeId.Structural(fileA) to GraphNodeId.Structural(fileB) in pairs)
-        assertTrue(GraphNodeId.Structural(fileB) to GraphNodeId.Structural(fileA) in pairs)
+        assertTrue(GraphNodeId.Structural(moduleA) to GraphNodeId.Structural(moduleB) in pairs)
+        assertTrue(GraphNodeId.Structural(moduleB) to GraphNodeId.Structural(moduleA) in pairs)
     }
 
     @Test
@@ -141,11 +146,11 @@ class VisibleGraphProjectionTest {
         val internal = edge(symbolA2, GraphNodeId.Structural(symbolB), DependencyClassification.INTERNAL, DependencyKind.TYPE_REFERENCE)
         val graph = graphOf(listOf(cohesion, internal))
 
-        val visible = projectVisibleGraph(graph, collapsed = setOf(fileA))
+        val visible = projectVisibleGraph(graph, expanded = setOf(moduleA))
 
         val edge = visible.edges.single()
-        assertEquals(GraphNodeId.Structural(fileA), edge.source)
-        assertEquals(GraphNodeId.Structural(symbolB), edge.target)
+        assertEquals(GraphNodeId.Structural(packageA), edge.source)
+        assertEquals(GraphNodeId.Structural(moduleB), edge.target)
         assertEquals(setOf(DependencyClassification.COHESION, DependencyClassification.INTERNAL), edge.classifications)
         assertEquals(setOf(cohesion, internal), edge.underlying)
     }
@@ -155,10 +160,10 @@ class VisibleGraphProjectionTest {
         val toExternal = edge(symbolA, GraphNodeId.External(external), DependencyClassification.EXTERNAL)
         val graph = graphOf(listOf(toExternal), listOf(ExternalNode(external)))
 
-        val visible = projectVisibleGraph(graph, collapsed = setOf(moduleA))
+        val visible = projectVisibleGraph(graph, expanded = setOf(moduleA))
 
         val edge = visible.edges.single()
-        assertEquals(GraphNodeId.Structural(moduleA), edge.source)
+        assertEquals(GraphNodeId.Structural(packageA), edge.source)
         assertEquals(GraphNodeId.External(external), edge.target)
         assertEquals(listOf(ExternalNode(external)), visible.externalNodes)
     }
@@ -171,7 +176,7 @@ class VisibleGraphProjectionTest {
             edges = emptyList(),
         )
 
-        val visible = projectVisibleGraph(graph, collapsed = emptySet())
+        val visible = projectVisibleGraph(graph, expanded = setOf(moduleA, packageA, fileA))
 
         assertEquals(ChangeKind.MODIFIED, visible.structuralNodes.single { it.node.path == symbolA }.node.change)
     }

@@ -16,6 +16,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.isSecondaryPressed
@@ -83,6 +84,7 @@ fun GraphCanvas(
     modifier: Modifier = Modifier,
 ) {
     var pan by remember { mutableStateOf(Offset.Zero) }
+    var zoom by remember { mutableStateOf(1f) }
     var dragTarget by remember { mutableStateOf<GraphNodeId?>(null) }
     val textMeasurer = rememberTextMeasurer()
     val labelMeasurements = remember(visible, textMeasurer) {
@@ -95,14 +97,18 @@ fun GraphCanvas(
             }
         }
     }
+    val currentVisible by rememberUpdatedState(visible)
     val currentLayout by rememberUpdatedState(layout)
     val currentOnSelect by rememberUpdatedState(onSelect)
     val currentOnExpand by rememberUpdatedState(onExpand)
     val currentOnCollapseSelfAndSiblings by rememberUpdatedState(onCollapseSelfAndSiblings)
     val currentOnMoveNode by rememberUpdatedState(onMoveNode)
 
+    fun graphPosition(position: Offset): Offset =
+        (position - pan).scaledBy(1f / zoom)
+
     fun hit(position: Offset, graphLayout: GraphLayout = currentLayout): GraphNodeId? {
-        val p = position - pan
+        val p = graphPosition(position)
         return graphLayout.bounds.entries
             .mapNotNull { (id, rect) ->
                 val center = rect.center.toOffset()
@@ -113,6 +119,12 @@ fun GraphCanvas(
             ?.first
     }
 
+    fun expandableHit(position: Offset): GraphNodeId.Structural? {
+        val id = hit(position) as? GraphNodeId.Structural ?: return null
+        val visibleNode = currentVisible.structuralNodes.firstOrNull { it.node.path == id.path }
+        return id.takeIf { visibleNode?.isCollapsed == true }
+    }
+
     Canvas(
         modifier = modifier
             .fillMaxSize()
@@ -120,7 +132,7 @@ fun GraphCanvas(
                 detectTapGestures(
                     onTap = { currentOnSelect(hit(it)) },
                     onDoubleTap = { position ->
-                        (hit(position) as? GraphNodeId.Structural)?.let(currentOnExpand)
+                        expandableHit(position)?.let(currentOnExpand)
                     },
                 )
             }
@@ -138,7 +150,10 @@ fun GraphCanvas(
                             currentLayout.centerOf(target)?.let { center ->
                                 currentOnMoveNode(
                                     target,
-                                    LayoutPoint(center.x + dragAmount.x, center.y + dragAmount.y),
+                                    LayoutPoint(
+                                        center.x + dragAmount.x / zoom,
+                                        center.y + dragAmount.y / zoom,
+                                    ),
                                 )
                             }
                         }
@@ -149,22 +164,38 @@ fun GraphCanvas(
                 awaitPointerEventScope {
                     while (true) {
                         val event = awaitPointerEvent()
-                        if (event.type == PointerEventType.Press && event.buttons.isSecondaryPressed) {
-                            val position = event.changes.firstOrNull()?.position ?: continue
-                            (hit(position) as? GraphNodeId.Structural)?.let(currentOnCollapseSelfAndSiblings)
-                            event.changes.forEach { it.consume() }
+                        when {
+                            event.type == PointerEventType.Press && event.buttons.isSecondaryPressed -> {
+                                val position = event.changes.firstOrNull()?.position ?: continue
+                                (hit(position) as? GraphNodeId.Structural)?.let(currentOnCollapseSelfAndSiblings)
+                                event.changes.forEach { it.consume() }
+                            }
+                            event.type == PointerEventType.Scroll -> {
+                                val change = event.changes.firstOrNull() ?: continue
+                                val scrollY = change.scrollDelta.y
+                                if (scrollY == 0f) continue
+                                val oldZoom = zoom
+                                val graphPoint = graphPosition(change.position)
+                                val factor = if (scrollY < 0f) ZOOM_STEP else 1f / ZOOM_STEP
+                                val newZoom = (oldZoom * factor).coerceIn(MIN_ZOOM, MAX_ZOOM)
+                                zoom = newZoom
+                                pan = change.position - graphPoint.toOffsetAt(newZoom)
+                                change.consume()
+                            }
                         }
                     }
                 }
             },
     ) {
-        val viewportIssue = if (pan == Offset.Zero) layout.viewportIssue(size.width, size.height) else null
+        val viewportIssue = if (pan == Offset.Zero && zoom == 1f) layout.viewportIssue(size.width, size.height) else null
         if (viewportIssue != null) {
             drawCanvasMessage(textMeasurer, viewportIssue)
         } else {
             translate(pan.x, pan.y) {
-                drawEdges(visible, layout)
-                drawNodes(visible, layout, selected, diagnosticNodes, textMeasurer, labelMeasurements)
+                scale(zoom, zoom, Offset.Zero) {
+                    drawEdges(visible, layout)
+                    drawNodes(visible, layout, selected, diagnosticNodes, textMeasurer, labelMeasurements)
+                }
             }
         }
     }
@@ -289,6 +320,10 @@ private fun DrawScope.drawBadge(textMeasurer: TextMeasurer, rect: LayoutRect, co
 
 private fun LayoutPoint.toOffset(): Offset = Offset(x, y)
 
+private fun Offset.scaledBy(scale: Float): Offset = Offset(x * scale, y * scale)
+
+private fun Offset.toOffsetAt(scale: Float): Offset = Offset(x * scale, y * scale)
+
 private fun GraphLayout.viewportIssue(width: Float, height: Float): String? {
     if (bounds.isEmpty()) return "Layout produced no visible node bounds."
     if (width <= 0f || height <= 0f) return null
@@ -311,3 +346,7 @@ private fun DrawScope.drawCanvasMessage(textMeasurer: TextMeasurer, message: Str
 }
 
 private val labelTextStyle = TextStyle(fontSize = 11.sp)
+
+private const val MIN_ZOOM = 0.25f
+private const val MAX_ZOOM = 4f
+private const val ZOOM_STEP = 1.12f
