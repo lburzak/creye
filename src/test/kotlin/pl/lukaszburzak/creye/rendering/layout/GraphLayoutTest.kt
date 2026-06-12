@@ -115,6 +115,42 @@ class GraphLayoutTest {
         assertEquals(0f, layout.height)
     }
 
+    @Test
+    fun `seed layout covers visible nodes without force simulation`() {
+        val paths = manySymbols(5)
+        val layout = seedVisibleGraphLayout(visibleGraph(paths))
+
+        assertEquals(paths.size, layout.bounds.size)
+        assertTrue(validateLayout(visibleGraph(paths), layout).isValid)
+    }
+
+    @Test
+    fun `validation reports missing visible node bounds`() {
+        val graph = visibleGraph(manySymbols(2))
+        val layout = GraphLayout(bounds = emptyMap(), width = 0f, height = 0f)
+
+        val validation = validateLayout(graph, layout)
+
+        assertFalse(validation.isValid)
+        assertTrue(validation.messages.any { it.contains("no node bounds") })
+    }
+
+    @Test
+    fun `validation reports invalid coordinates`() {
+        val graph = visibleGraph(manySymbols(1))
+        val id = GraphNodeId.Structural(graph.structuralNodes.first().node.path)
+        val layout = GraphLayout(
+            bounds = mapOf(id to LayoutRect(Float.NaN, 0f, LayoutMetrics.NODE_DIAMETER, LayoutMetrics.NODE_DIAMETER)),
+            width = Float.NaN,
+            height = LayoutMetrics.NODE_DIAMETER,
+        )
+
+        val validation = validateLayout(graph, layout)
+
+        assertFalse(validation.isValid)
+        assertTrue(validation.messages.any { it.contains("invalid") })
+    }
+
     private fun GraphLayout.distance(source: GraphNodeId, target: GraphNodeId): Float {
         val a = centerOf(source)!!
         val b = centerOf(target)!!

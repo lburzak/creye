@@ -37,11 +37,32 @@ data class GraphLayout(
 ) {
     fun centerOf(id: GraphNodeId): LayoutPoint? = bounds[id]?.center
 
+    fun centers(): Map<GraphNodeId, LayoutPoint> = bounds.mapValues { (_, rect) -> rect.center }
+
     fun withCenters(overrides: Map<GraphNodeId, LayoutPoint>): GraphLayout {
         if (overrides.isEmpty()) return this
-        val centers = bounds.mapValues { (id, rect) -> overrides[id] ?: rect.center }
-        return graphLayoutFromCenters(centers, normalize = false)
+        val changedBounds = bounds.toMutableMap()
+        for ((id, center) in overrides) {
+            if (id !in changedBounds) continue
+            changedBounds[id] = LayoutRect(
+                x = center.x - LayoutMetrics.NODE_RADIUS,
+                y = center.y - LayoutMetrics.NODE_RADIUS,
+                width = LayoutMetrics.NODE_DIAMETER,
+                height = LayoutMetrics.NODE_DIAMETER,
+            )
+        }
+        return GraphLayout(
+            bounds = changedBounds,
+            width = changedBounds.values.maxOfOrNull { it.right } ?: 0f,
+            height = changedBounds.values.maxOfOrNull { it.bottom } ?: 0f,
+        )
     }
+}
+
+data class LayoutValidation(
+    val messages: List<String>,
+) {
+    val isValid: Boolean get() = messages.isEmpty()
 }
 
 object LayoutMetrics {
@@ -85,6 +106,49 @@ fun layoutVisibleGraph(
         localForceLayout(ids, positions, edges)
     }
     return graphLayoutFromCenters(centers, normalize = true)
+}
+
+fun seedVisibleGraphLayout(
+    visible: VisibleGraph,
+    seeds: Map<GraphNodeId, LayoutPoint> = emptyMap(),
+): GraphLayout {
+    val ids = visible.nodeIds()
+    if (ids.isEmpty()) return GraphLayout(emptyMap(), width = 0f, height = 0f)
+    val centers = initialPositions(ids, seeds).mapValues { it.value.immutable() }
+    return graphLayoutFromCenters(centers, normalize = true)
+}
+
+fun validateLayout(visible: VisibleGraph, layout: GraphLayout): LayoutValidation {
+    val expected = visible.nodeIds().toSet()
+    if (expected.isEmpty()) return LayoutValidation(emptyList())
+
+    val messages = mutableListOf<String>()
+    if (layout.bounds.isEmpty()) {
+        messages += "Layout has no node bounds for ${expected.size} visible nodes."
+    }
+
+    val missing = expected - layout.bounds.keys
+    if (missing.isNotEmpty()) {
+        messages += "Layout is missing ${missing.size} visible node bounds."
+    }
+
+    if (!layout.width.isFinite() || !layout.height.isFinite() || layout.width <= 0f || layout.height <= 0f) {
+        messages += "Layout dimensions are invalid: ${layout.width} x ${layout.height}."
+    }
+
+    val invalidBounds = layout.bounds.count { (_, rect) ->
+        !rect.x.isFinite() ||
+            !rect.y.isFinite() ||
+            !rect.width.isFinite() ||
+            !rect.height.isFinite() ||
+            rect.width <= 0f ||
+            rect.height <= 0f
+    }
+    if (invalidBounds > 0) {
+        messages += "Layout contains $invalidBounds invalid node bounds."
+    }
+
+    return LayoutValidation(messages)
 }
 
 private fun localForceLayout(

@@ -20,6 +20,7 @@ import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
@@ -84,6 +85,16 @@ fun GraphCanvas(
     var pan by remember { mutableStateOf(Offset.Zero) }
     var dragTarget by remember { mutableStateOf<GraphNodeId?>(null) }
     val textMeasurer = rememberTextMeasurer()
+    val labelMeasurements = remember(visible, textMeasurer) {
+        buildMap {
+            for (node in visible.structuralNodes) {
+                put(GraphNodeId.Structural(node.node.path), textMeasurer.measure(node.node.displayName, labelTextStyle))
+            }
+            for (external in visible.externalNodes) {
+                put(GraphNodeId.External(external.id), textMeasurer.measure(external.id.displayName, labelTextStyle))
+            }
+        }
+    }
     val currentLayout by rememberUpdatedState(layout)
     val currentOnSelect by rememberUpdatedState(onSelect)
     val currentOnExpand by rememberUpdatedState(onExpand)
@@ -147,9 +158,14 @@ fun GraphCanvas(
                 }
             },
     ) {
-        translate(pan.x, pan.y) {
-            drawEdges(visible, layout)
-            drawNodes(visible, layout, selected, diagnosticNodes, textMeasurer)
+        val viewportIssue = if (pan == Offset.Zero) layout.viewportIssue(size.width, size.height) else null
+        if (viewportIssue != null) {
+            drawCanvasMessage(textMeasurer, viewportIssue)
+        } else {
+            translate(pan.x, pan.y) {
+                drawEdges(visible, layout)
+                drawNodes(visible, layout, selected, diagnosticNodes, textMeasurer, labelMeasurements)
+            }
         }
     }
 }
@@ -206,6 +222,7 @@ private fun DrawScope.drawNodes(
     selected: GraphNodeId?,
     diagnosticNodes: Set<GraphNodeId>,
     textMeasurer: TextMeasurer,
+    labelMeasurements: Map<GraphNodeId, TextLayoutResult>,
 ) {
     for (visibleNode in visible.structuralNodes.sortedBy { it.node.path.segments.size }) {
         val id = GraphNodeId.Structural(visibleNode.node.path)
@@ -218,7 +235,7 @@ private fun DrawScope.drawNodes(
         }
         val center = rect.center.toOffset()
         drawCircle(changeColor ?: Palette.nodeFill, radius = LayoutMetrics.NODE_RADIUS, center = center)
-        drawLabel(textMeasurer, visibleNode.node.displayName, rect, Palette.label)
+        labelMeasurements[id]?.let { drawLabel(it, rect, Palette.label) }
         if (selected == id) {
             drawCircle(Palette.selection, radius = LayoutMetrics.NODE_RADIUS + 3f, center = center, style = Stroke(width = 2.5f))
         }
@@ -238,7 +255,7 @@ private fun DrawScope.drawNodes(
         val rect = layout.bounds[id] ?: continue
         val center = rect.center.toOffset()
         drawCircle(Palette.externalFill, radius = LayoutMetrics.NODE_RADIUS, center = center)
-        drawLabel(textMeasurer, external.id.displayName, rect, Palette.label)
+        labelMeasurements[id]?.let { drawLabel(it, rect, Palette.label) }
         if (selected == id) {
             drawCircle(Palette.selection, radius = LayoutMetrics.NODE_RADIUS + 3f, center = center, style = Stroke(width = 2.5f))
         }
@@ -249,12 +266,10 @@ private fun DrawScope.drawNodes(
 }
 
 private fun DrawScope.drawLabel(
-    textMeasurer: TextMeasurer,
-    text: String,
+    measured: TextLayoutResult,
     rect: LayoutRect,
     color: Color,
 ) {
-    val measured = textMeasurer.measure(text, TextStyle(fontSize = 11.sp))
     val center = rect.center
     val x = center.x - measured.size.width / 2f
     val y = center.y + LayoutMetrics.NODE_RADIUS + 4f
@@ -273,3 +288,26 @@ private fun DrawScope.drawBadge(textMeasurer: TextMeasurer, rect: LayoutRect, co
 }
 
 private fun LayoutPoint.toOffset(): Offset = Offset(x, y)
+
+private fun GraphLayout.viewportIssue(width: Float, height: Float): String? {
+    if (bounds.isEmpty()) return "Layout produced no visible node bounds."
+    if (width <= 0f || height <= 0f) return null
+    val hasVisibleBounds = bounds.values.any { rect ->
+        rect.right >= 0f && rect.x <= width && rect.bottom >= 0f && rect.y <= height
+    }
+    return if (hasVisibleBounds) null else "Layout produced nodes outside the visible canvas."
+}
+
+private fun DrawScope.drawCanvasMessage(textMeasurer: TextMeasurer, message: String) {
+    val measured = textMeasurer.measure(message, TextStyle(fontSize = 12.sp))
+    drawText(
+        measured,
+        Palette.diagnosticMarker,
+        Offset(
+            x = (size.width - measured.size.width) / 2f,
+            y = (size.height - measured.size.height) / 2f,
+        ),
+    )
+}
+
+private val labelTextStyle = TextStyle(fontSize = 11.sp)
