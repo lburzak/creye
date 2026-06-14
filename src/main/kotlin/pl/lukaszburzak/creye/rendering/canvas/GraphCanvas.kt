@@ -12,6 +12,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
@@ -31,6 +32,8 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.sp
 import pl.lukaszburzak.creye.domain.change.ChangeKind
 import pl.lukaszburzak.creye.domain.graph.DependencyClassification
+import pl.lukaszburzak.creye.domain.identity.NodePath
+import pl.lukaszburzak.creye.domain.identity.NodeSegment
 import pl.lukaszburzak.creye.domain.graph.GraphNodeId
 import pl.lukaszburzak.creye.rendering.layout.GraphLayout
 import pl.lukaszburzak.creye.rendering.layout.LayoutMetrics
@@ -48,7 +51,7 @@ private object Palette {
     val nodeFill = Color(0xFF5B6670)
     val externalFill = Color(0xFF7E57C2)
     val added = Color(0xFF4CAF50)
-    val modified = Color(0xFFFFB300)
+    val modified = Color(0xFF1976D2)
     val deleted = Color(0xFFE53935)
     val selection = Color(0xFF2196F3)
     val internalEdge = Color(0xFF42A5F5)
@@ -102,6 +105,9 @@ fun GraphCanvas(
                 put(GraphNodeId.External(external.id), textMeasurer.measure(external.id.displayName, labelTextStyle))
             }
         }
+    }
+    val iconMeasurements = remember(textMeasurer) {
+        listOf("M", "P", "F", "C", "ƒ").associateWith { textMeasurer.measure(it, iconTextStyle) }
     }
     val currentVisible by rememberUpdatedState(visible)
     val currentLayout by rememberUpdatedState(layout)
@@ -216,7 +222,7 @@ fun GraphCanvas(
                 scale(zoom, zoom, Offset.Zero) {
                     drawHierarchyEdges(visible, layout)
                     drawEdges(visible, layout)
-                    drawNodes(visible, layout, selected, diagnosticNodes, textMeasurer, labelMeasurements)
+                    drawNodes(visible, layout, selected, diagnosticNodes, textMeasurer, labelMeasurements, iconMeasurements)
                 }
             }
         }
@@ -294,24 +300,34 @@ private fun DrawScope.drawNodes(
     diagnosticNodes: Set<GraphNodeId>,
     textMeasurer: TextMeasurer,
     labelMeasurements: Map<GraphNodeId, TextLayoutResult>,
+    iconMeasurements: Map<String, TextLayoutResult>,
 ) {
+    val changedPaths = visible.structuralNodes
+        .filter { it.node.change != null }
+        .mapTo(mutableSetOf()) { it.node.path }
+
     for (visibleNode in visible.structuralNodes.sortedBy { it.node.path.segments.size }) {
         val id = GraphNodeId.Structural(visibleNode.node.path)
         val rect = layout.bounds[id] ?: continue
-        val changeColor = when (visibleNode.node.change) {
+        val fillColor = when (visibleNode.node.change) {
             ChangeKind.ADDED -> Palette.added
             ChangeKind.MODIFIED -> Palette.modified
             ChangeKind.DELETED -> Palette.deleted
-            null -> null
+            null -> if (changedPaths.any { it.isDescendantOf(visibleNode.node.path) }) Palette.modified else Palette.nodeFill
         }
         val center = rect.center.toOffset()
-        drawCircle(changeColor ?: Palette.nodeFill, radius = LayoutMetrics.NODE_RADIUS, center = center)
+        val lastSegment = visibleNode.node.path.segments.last()
+        drawNodeShape(lastSegment, center, fillColor)
+        val icon = nodeIcon(lastSegment)
+        iconMeasurements[icon]?.let { measured ->
+            drawText(measured, Palette.label, Offset(center.x - measured.size.width / 2f, center.y - measured.size.height / 2f))
+        }
         labelMeasurements[id]?.let { drawLabel(it, rect, Palette.label) }
         if (selected == id) {
-            drawCircle(Palette.selection, radius = LayoutMetrics.NODE_RADIUS + 3f, center = center, style = Stroke(width = 2.5f))
+            drawNodeShapeStroke(lastSegment, center, Palette.selection, radiusOffset = 3f, strokeWidth = 2.5f)
         }
         if (visibleNode.isCollapsed) {
-            drawCircle(Palette.collapsedRing, radius = LayoutMetrics.NODE_RADIUS - 4f, center = center, style = Stroke(width = 1.4f))
+            drawNodeShapeStroke(lastSegment, center, Palette.collapsedRing, radiusOffset = -4f, strokeWidth = 1.4f)
         }
         if (visibleNode.internalizedEdges.isNotEmpty()) {
             drawBadge(textMeasurer, rect, visibleNode.internalizedEdges.size)
@@ -335,6 +351,87 @@ private fun DrawScope.drawNodes(
         }
     }
 }
+
+private fun DrawScope.drawNodeShape(segment: NodeSegment, center: Offset, color: Color) {
+    when (segment) {
+        is NodeSegment.Symbol -> {
+            drawPath(
+                Path().apply {
+                    moveTo(center.x, center.y - LayoutMetrics.NODE_RADIUS)
+                    lineTo(center.x + LayoutMetrics.NODE_RADIUS * 0.866f, center.y + LayoutMetrics.NODE_RADIUS * 0.5f)
+                    lineTo(center.x - LayoutMetrics.NODE_RADIUS * 0.866f, center.y + LayoutMetrics.NODE_RADIUS * 0.5f)
+                    close()
+                },
+                color,
+            )
+        }
+        is NodeSegment.Package -> {
+            val s = LayoutMetrics.NODE_RADIUS * 0.707f
+            drawRect(color, topLeft = Offset(center.x - s, center.y - s), size = Size(s * 2, s * 2))
+        }
+        is NodeSegment.Module -> {
+            val r = LayoutMetrics.NODE_RADIUS
+            drawPath(
+                Path().apply {
+                    moveTo(center.x, center.y - r)
+                    lineTo(center.x + r, center.y)
+                    lineTo(center.x, center.y + r)
+                    lineTo(center.x - r, center.y)
+                    close()
+                },
+                color,
+            )
+        }
+        else -> drawCircle(color, radius = LayoutMetrics.NODE_RADIUS, center = center)
+    }
+}
+
+private fun DrawScope.drawNodeShapeStroke(segment: NodeSegment, center: Offset, color: Color, radiusOffset: Float, strokeWidth: Float) {
+    val r = LayoutMetrics.NODE_RADIUS + radiusOffset
+    when (segment) {
+        is NodeSegment.Symbol -> {
+            drawPath(
+                Path().apply {
+                    moveTo(center.x, center.y - r)
+                    lineTo(center.x + r * 0.866f, center.y + r * 0.5f)
+                    lineTo(center.x - r * 0.866f, center.y + r * 0.5f)
+                    close()
+                },
+                color,
+                style = Stroke(width = strokeWidth),
+            )
+        }
+        is NodeSegment.Package -> {
+            val s = r * 0.707f
+            drawRect(color, topLeft = Offset(center.x - s, center.y - s), size = Size(s * 2, s * 2), style = Stroke(width = strokeWidth))
+        }
+        is NodeSegment.Module -> {
+            drawPath(
+                Path().apply {
+                    moveTo(center.x, center.y - r)
+                    lineTo(center.x + r, center.y)
+                    lineTo(center.x, center.y + r)
+                    lineTo(center.x - r, center.y)
+                    close()
+                },
+                color,
+                style = Stroke(width = strokeWidth),
+            )
+        }
+        else -> drawCircle(color, radius = r, center = center, style = Stroke(width = strokeWidth))
+    }
+}
+
+private fun nodeIcon(segment: NodeSegment): String = when (segment) {
+    is NodeSegment.Module -> "M"
+    is NodeSegment.Package -> "P"
+    is NodeSegment.File -> "F"
+    is NodeSegment.Class -> "C"
+    is NodeSegment.Symbol -> "ƒ"
+}
+
+private fun NodePath.isDescendantOf(ancestor: NodePath): Boolean =
+    segments.size > ancestor.segments.size && segments.take(ancestor.segments.size) == ancestor.segments
 
 private fun DrawScope.drawLabel(
     measured: TextLayoutResult,
@@ -386,6 +483,7 @@ private fun DrawScope.drawCanvasMessage(textMeasurer: TextMeasurer, message: Str
 }
 
 private val labelTextStyle = TextStyle(fontSize = 11.sp)
+private val iconTextStyle = TextStyle(fontSize = 8.sp)
 
 private const val MIN_ZOOM = 0.25f
 private const val MAX_ZOOM = 4f

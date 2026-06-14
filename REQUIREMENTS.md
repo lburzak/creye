@@ -1,4 +1,5 @@
 # Graph Representation
+
 - MUST be force-directed
   - Nodes MUST repulse to avoid stacking
   - Nodes MUST attract related nodes
@@ -8,21 +9,39 @@
   - MUST rerender while a node is being moved
   - MUST NOT require graph analysis to rerun during render interactions
 - MUST be zoomable
+
 ## Node
-- MUST be circle
-  - Constant size
-  - Color based on diff
+
+- MUST be circle with constant size
 - MUST expand on double-click
   - Children MUST be clustered
   - Expanded node MUST remain visible
   - Children MUST be connected to expanded node via edges
 - MUST collapse itself, and all siblings on right-click
+- MUST contain an icon, indicating it's type
+- Color MUST indicate it's diff
+  - Modified -> Blue
+  - Added -> Green
+  - Deleted -> Red
+  - Any descendant changed -> Blue
+- Shape MUST indicate it's type
+  - Symbol -> Triangle
+  - Class/Interface/Enum -> Circle
+  - Package -> Square
+  - Module -> Diamond
+
 ## Edge
+
 - Edges of children MUST be conflated on ancestor
 - Dependency edges MUST preserve direction, classification, deduplication, and underlying-edge traceability while conflated
 - Hierarchy edges MUST be render-derived from visible parent-child structural nodes and MUST be visually distinct from dependency edges
 
+# Diff interpretation
+
+- When file is deleted, it's module MUST be resolved to the one it belongs to in comparison target branch
+
 # Living Graph
+
 Create a graph visualization that feels alive: it continuously evaluates physical forces, propagates movement through connected nodes, and allows subtle global drift without losing readability.
 
 # Requirements
