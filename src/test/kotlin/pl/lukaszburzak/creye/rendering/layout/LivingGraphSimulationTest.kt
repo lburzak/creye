@@ -121,6 +121,57 @@ class LivingGraphSimulationTest {
         assertTrue(simulation.centerOf(a).x <= 200f - LayoutMetrics.NODE_RADIUS)
     }
 
+    @Test
+    fun `center gravity pulls nodes toward viewport center`() {
+        val simulation = LivingGraphSimulation(
+            visible = visibleGraph(listOf(symbolA)),
+            initialCenters = mapOf(a to LayoutPoint(20f, 100f)),
+            config = quietConfig(damping = 1f, gravity = 0.05f),
+        )
+        simulation.setViewport(width = 200f, height = 200f)
+
+        repeat(3) { simulation.step() }
+
+        assertTrue(simulation.centerOf(a).x > 20f)
+    }
+
+    @Test
+    fun `node attraction strength pulls connected nodes together`() {
+        val simulation = LivingGraphSimulation(
+            visible = visibleGraph(
+                paths = listOf(symbolA, symbolB),
+                edges = listOf(edge(a, b)),
+            ),
+            initialCenters = mapOf(
+                a to LayoutPoint(100f, 100f),
+                b to LayoutPoint(300f, 100f),
+            ),
+            config = quietConfig(springStrength = 0.05f, damping = 1f),
+        )
+
+        repeat(3) { simulation.step() }
+
+        assertTrue(simulation.centerOf(a).x > 100f)
+        assertTrue(simulation.centerOf(b).x < 300f)
+    }
+
+    @Test
+    fun `node repulsion strength pushes nodes apart`() {
+        val simulation = LivingGraphSimulation(
+            visible = visibleGraph(listOf(symbolA, symbolB)),
+            initialCenters = mapOf(
+                a to LayoutPoint(100f, 100f),
+                b to LayoutPoint(120f, 100f),
+            ),
+            config = quietConfig(nodeRepulsion = 1_000f, damping = 1f),
+        )
+
+        simulation.step()
+
+        assertTrue(simulation.centerOf(a).x < 100f)
+        assertTrue(simulation.centerOf(b).x > 120f)
+    }
+
     private fun path(symbol: NodeSegment.Symbol): NodePath =
         NodePath(listOf(module, pkg, file, symbol))
 
@@ -145,21 +196,22 @@ class LivingGraphSimulationTest {
         centers().getValue(id)
 
     private fun quietConfig(
+        nodeRepulsion: Float = 0f,
         springStrength: Float = 0f,
         damping: Float = 0.88f,
+        gravity: Float = 0f,
         driftStrength: Float = 0f,
         viewportPadding: Float = LayoutMetrics.MARGIN,
         maxVelocity: Float = 18f,
     ): LivingGraphSimulationConfig =
         LivingGraphSimulationConfig(
-            nodeRepulsion = 0f,
+            nodeRepulsion = nodeRepulsion,
             springStrength = springStrength,
             damping = damping,
-            gravity = 0f,
+            gravity = gravity,
             driftStrength = driftStrength,
             collisionStrength = 0f,
             maxVelocity = maxVelocity,
             viewportPadding = viewportPadding,
         )
 }
-

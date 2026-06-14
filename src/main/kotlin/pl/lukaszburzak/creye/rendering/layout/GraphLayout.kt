@@ -112,11 +112,13 @@ fun layoutVisibleGraph(
 fun seedVisibleGraphLayout(
     visible: VisibleGraph,
     seeds: Map<GraphNodeId, LayoutPoint> = emptyMap(),
+    normalize: Boolean = true,
+    resolveOverlap: Boolean = true,
 ): GraphLayout {
     val ids = visible.nodeIds()
     if (ids.isEmpty()) return GraphLayout(emptyMap(), width = 0f, height = 0f)
     val centers = initialPositions(ids, seeds, visible).mapValues { it.value.immutable() }
-    return graphLayoutFromCenters(centers, normalize = true)
+    return graphLayoutFromCenters(centers, normalize = normalize, resolveOverlap = resolveOverlap)
 }
 
 fun validateLayout(visible: VisibleGraph, layout: GraphLayout): LayoutValidation {

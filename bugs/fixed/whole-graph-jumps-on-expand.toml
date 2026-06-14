@@ -1,0 +1,24 @@
+expected = "Expanding a node should keep the existing visible graph spatially stable: the expanded node should remain visible, new children should appear clustered near it, and unrelated visible nodes should not jump as a whole."
+actual = "When a node was expanded, the whole graph visibly jumped instead of preserving the current live layout and introducing only local movement around the expanded node."
+environment = "IntelliJ plugin graph editor in /Users/lburzak/dev/creye with current uncommitted Living Graph changes in the working tree."
+encountered-in-commit = "13c6fe0b82765004daba9a8c4e89bd66546a1ea0"
+reproduction-steps = [
+  "Open the dependency graph editor.",
+  "Wait for the graph to settle into its current live layout.",
+  "Double-click a collapsed node to expand it.",
+  "Observe that the whole visible graph jumps instead of preserving the existing layout context.",
+]
+
+[[hypothesis]]
+clues = [
+  "Expansion changes the visible projection, which recreates LivingGraphSimulation.",
+  "The previous transition path could seed from a normalized completed layout instead of preserving prior live coordinates.",
+  "ForceAtlas2 normalization and simulation reinitialization can shift all node coordinates at once.",
+]
+validation-steps = [
+  "Added a layout regression test proving transition seed layout preserves an existing parent center while clustering newly visible children.",
+  "Ran targeted layout and simulation tests.",
+  "Ran the full test suite.",
+]
+probability = 5
+fix = "Visible projection transitions now seed from current live centers with normalize=false and resolveOverlap=false, skip the asynchronous ForceAtlas2 replacement when live positions already exist, and let the continuous simulation settle newly visible nodes locally."

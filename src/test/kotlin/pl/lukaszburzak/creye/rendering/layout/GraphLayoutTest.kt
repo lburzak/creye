@@ -121,6 +121,26 @@ class GraphLayoutTest {
     }
 
     @Test
+    fun `transition seed layout preserves existing centers while clustering newly visible children`() {
+        val packageA = path(module, NodeSegment.Package("com.a"))
+        val packageB = path(module, NodeSegment.Package("com.b"))
+        val parent = path(module)
+        val graph = visibleGraph(listOf(parent, packageA, packageB))
+        val parentId = GraphNodeId.Structural(parent)
+
+        val layout = seedVisibleGraphLayout(
+            graph,
+            seeds = mapOf(parentId to LayoutPoint(400f, 320f)),
+            normalize = false,
+            resolveOverlap = false,
+        )
+
+        assertEquals(LayoutPoint(400f, 320f), layout.centerOf(parentId))
+        assertTrue(layout.distance(parentId, GraphNodeId.Structural(packageA)) < 80f)
+        assertTrue(layout.distance(parentId, GraphNodeId.Structural(packageB)) < 80f)
+    }
+
+    @Test
     fun `layout uses seed positions for stable recomputation`() {
         val paths = manySymbols(3)
         val id = GraphNodeId.Structural(paths.last())
