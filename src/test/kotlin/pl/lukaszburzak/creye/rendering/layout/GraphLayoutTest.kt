@@ -35,7 +35,7 @@ class GraphLayoutTest {
         edges: List<VisibleEdge> = emptyList(),
     ): VisibleGraph {
         val structuralNodes = paths.map {
-            VisibleNode(StructuralNode(it, it.displayName(), change = null), isCollapsed = false, internalizedEdges = emptySet())
+            VisibleNode(StructuralNode(it, it.displayName(), change = null), isCollapsed = false, internalizedEdges = emptySet(), hasDescendantChange = false)
         }
         val visiblePaths = paths.toSet()
         val hierarchyEdges = paths.mapNotNull { path ->

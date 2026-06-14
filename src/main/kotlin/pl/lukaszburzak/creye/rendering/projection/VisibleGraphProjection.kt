@@ -17,6 +17,7 @@ data class VisibleNode(
     val node: StructuralNode,
     val isCollapsed: Boolean,
     val internalizedEdges: Set<DependencyEdge>,
+    val hasDescendantChange: Boolean,
 )
 
 /**
@@ -79,6 +80,10 @@ fun projectVisibleGraph(graph: DependencyGraph, expanded: Set<NodePath>): Visibl
         }
     }
 
+    val allChangedPaths = graph.structuralNodes
+        .filter { it.change != null }
+        .mapTo(mutableSetOf()) { it.path }
+
     val structuralNodes = graph.structuralNodes
         .filter { it.path in visiblePaths }
         .map { node ->
@@ -86,6 +91,10 @@ fun projectVisibleGraph(graph: DependencyGraph, expanded: Set<NodePath>): Visibl
                 node = node,
                 isCollapsed = node.path !in expanded && childrenByParent[node.path].orEmpty().isNotEmpty(),
                 internalizedEdges = internalized[node.path].orEmpty(),
+                hasDescendantChange = allChangedPaths.any { changed ->
+                    changed.segments.size > node.path.segments.size &&
+                        changed.segments.take(node.path.segments.size) == node.path.segments
+                },
             )
         }
     val hierarchyEdges = structuralNodes.mapNotNull { node ->

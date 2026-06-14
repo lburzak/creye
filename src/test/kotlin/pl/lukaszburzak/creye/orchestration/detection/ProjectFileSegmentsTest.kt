@@ -37,14 +37,43 @@ class ProjectFileSegmentsTest : BasePlatformTestCase() {
         assertTrue(diagnostic.message.contains("Gradle module id was not available"))
     }
 
-    fun `test unresolved file uses unresolved module with project model diagnostic`() {
+    fun `test unresolved file with no source-root match uses unresolved module with project model diagnostic`() {
         val context = ProjectFileSegments(
             project = project,
             repositoryRootPath = project.basePath.orEmpty(),
             fileForPath = { null },
+            moduleForDeletedPath = { null },
         )("src/Missing.kt")
 
         assertEquals(ProjectFileSegments.UNRESOLVED_MODULE, context.moduleId)
         assertEquals(DiagnosticSource.PROJECT_MODEL, context.diagnostics.single().source)
+    }
+
+    fun `test deleted file resolves module via source root containment`() {
+        val context = ProjectFileSegments(
+            project = project,
+            repositoryRootPath = project.basePath.orEmpty(),
+            gradleModuleId = { ":feature" },
+            fileForPath = { null },
+            moduleForDeletedPath = { module },
+        )("src/Deleted.kt")
+
+        assertEquals(":feature", context.moduleId)
+        assertEmpty(context.diagnostics)
+    }
+
+    fun `test deleted file with source-root match but no gradle id falls back to intellij module name`() {
+        val context = ProjectFileSegments(
+            project = project,
+            repositoryRootPath = project.basePath.orEmpty(),
+            gradleModuleId = { null },
+            fileForPath = { null },
+            moduleForDeletedPath = { module },
+        )("src/Deleted.kt")
+
+        assertEquals(module.name, context.moduleId)
+        val diagnostic = context.diagnostics.single()
+        assertEquals(DiagnosticSource.PROJECT_MODEL, diagnostic.source)
+        assertTrue(diagnostic.message.contains("Gradle module id was not available"))
     }
 }

@@ -32,7 +32,6 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.sp
 import pl.lukaszburzak.creye.domain.change.ChangeKind
 import pl.lukaszburzak.creye.domain.graph.DependencyClassification
-import pl.lukaszburzak.creye.domain.identity.NodePath
 import pl.lukaszburzak.creye.domain.identity.NodeSegment
 import pl.lukaszburzak.creye.domain.graph.GraphNodeId
 import pl.lukaszburzak.creye.rendering.layout.GraphLayout
@@ -302,10 +301,6 @@ private fun DrawScope.drawNodes(
     labelMeasurements: Map<GraphNodeId, TextLayoutResult>,
     iconMeasurements: Map<String, TextLayoutResult>,
 ) {
-    val changedPaths = visible.structuralNodes
-        .filter { it.node.change != null }
-        .mapTo(mutableSetOf()) { it.node.path }
-
     for (visibleNode in visible.structuralNodes.sortedBy { it.node.path.segments.size }) {
         val id = GraphNodeId.Structural(visibleNode.node.path)
         val rect = layout.bounds[id] ?: continue
@@ -313,7 +308,7 @@ private fun DrawScope.drawNodes(
             ChangeKind.ADDED -> Palette.added
             ChangeKind.MODIFIED -> Palette.modified
             ChangeKind.DELETED -> Palette.deleted
-            null -> if (changedPaths.any { it.isDescendantOf(visibleNode.node.path) }) Palette.modified else Palette.nodeFill
+            null -> if (visibleNode.hasDescendantChange) Palette.modified else Palette.nodeFill
         }
         val center = rect.center.toOffset()
         val lastSegment = visibleNode.node.path.segments.last()
@@ -429,9 +424,6 @@ private fun nodeIcon(segment: NodeSegment): String = when (segment) {
     is NodeSegment.Class -> "C"
     is NodeSegment.Symbol -> "ƒ"
 }
-
-private fun NodePath.isDescendantOf(ancestor: NodePath): Boolean =
-    segments.size > ancestor.segments.size && segments.take(ancestor.segments.size) == ancestor.segments
 
 private fun DrawScope.drawLabel(
     measured: TextLayoutResult,

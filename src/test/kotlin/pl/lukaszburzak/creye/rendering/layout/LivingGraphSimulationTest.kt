@@ -181,7 +181,7 @@ class LivingGraphSimulationTest {
     ): VisibleGraph =
         VisibleGraph(
             structuralNodes = paths.map {
-                VisibleNode(StructuralNode(it, it.displayName(), change = null), isCollapsed = false, internalizedEdges = emptySet())
+                VisibleNode(StructuralNode(it, it.displayName(), change = null), isCollapsed = false, internalizedEdges = emptySet(), hasDescendantChange = false)
             },
             externalNodes = emptyList(),
             edges = edges,
