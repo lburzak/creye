@@ -119,26 +119,40 @@ The key words "MUST", "MUST NOT", "SHOULD", "SHOULD NOT", "MAY", and "OPTIONAL" 
 - Implementations and documentation SHOULD use "spring-like edge forces" for the mechanism that transfers motion between connected nodes.
 - Implementations and documentation SHOULD use "drift" for slow global movement of the whole graph or its components.
 
-
 # Context Menus
+
 - Right-click MUST open a context menu
   - Right-click on a node MUST open the Node menu
   - Right-click on empty canvas MUST open the Graph canvas menu
 - Node
   - Show diff with descendants
-	- Go to nearest class
-	- Go to nearest package
-	- Go to nearest module
-	- Expand
-	- Collapse
-	- Expand down to Classes (if applicable)
-	- Expand down to Symbols (if applicable)
+  - Go to nearest class
+  - Go to nearest package
+  - Go to nearest module
+  - Expand
+  - Collapse
+  - Expand down to Classes (if applicable)
+  - Expand down to Symbols (if applicable)
 - Graph canvas
-	- Undo
-	- Expand All
-	- Collapse All
-	- Expand down to Classes
-	- Expand down to Symbols
+  - Undo
+  - Expand All
+  - Collapse All
+  - Expand down to Classes
+  - Expand down to Symbols
 
 # Combined Diff View
+
 - MUST be opened side-by-side to graph
+
+## Approvals
+
+- Node context menu must list "Approved" item with a trailing tick if approved
+- Node representation MUST indicate it's approval status
+- Approval status MUST be persisted
+- A node's approval MUST be invalidated when that node's diffed content changes; approvals for unchanged nodes MUST be retained
+- File approval control MUST be displayed in Combined Diff
+- Approved code blocks MUST be highlighted in Combined Diff
+- A gutter icon MUST indicate approval status for classes/symbols
+  - MUST be green circle, when approved
+  - MUST be red circle when unapproved
+  - MUST toggle approval when clicked
