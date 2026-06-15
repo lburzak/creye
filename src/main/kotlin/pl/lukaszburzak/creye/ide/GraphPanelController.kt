@@ -1,17 +1,22 @@
 package pl.lukaszburzak.creye.ide
 
+import com.intellij.openapi.application.EDT
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.ui.Messages
 import git4idea.repo.GitRepositoryManager
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import pl.lukaszburzak.creye.domain.graph.DependencyGraph
+import pl.lukaszburzak.creye.domain.identity.NodePath
 import pl.lukaszburzak.creye.orchestration.GraphAnalysisService
 import pl.lukaszburzak.creye.rendering.AnalysisPhase
 import pl.lukaszburzak.creye.rendering.GraphPanelState
@@ -30,6 +35,7 @@ class GraphPanelController(
     val state: StateFlow<GraphPanelState> = _state.asStateFlow()
 
     private var analysis: Deferred<DependencyGraph>? = null
+    private val diffPresenter = NodeDiffPresenter(project)
 
     /** Restores ADR-011 state when the panel opens: branch list, persisted selection. */
     fun activate() {
@@ -62,6 +68,27 @@ class GraphPanelController(
 
     fun refresh() {
         _state.value.selectedBranch?.let(::runAnalysis)
+    }
+
+    /** Opens the IDE diff for a clicked node and its descendants against the selected branch. */
+    fun showNodeDiff(node: NodePath) {
+        val graph = (_state.value.phase as? AnalysisPhase.Ready)?.graph ?: return
+        val branch = _state.value.selectedBranch ?: return
+        scope.launch {
+            val result = withContext(Dispatchers.Default) { diffPresenter.resolve(node, graph, branch) }
+            withContext(Dispatchers.EDT) {
+                when (result) {
+                    is NodeDiffPresenter.Result.Ready ->
+                        diffPresenter.show(result.changes, "Diff vs '$branch' (${result.changes.size} files)")
+                    is NodeDiffPresenter.Result.Empty -> Messages.showInfoMessage(
+                        project, "No changes in the selected node against '${result.branch}'.", "Show Diff",
+                    )
+                    is NodeDiffPresenter.Result.Failed -> Messages.showErrorDialog(
+                        project, result.message, "Show Diff",
+                    )
+                }
+            }
+        }
     }
 
     private fun runAnalysis(branch: String) {

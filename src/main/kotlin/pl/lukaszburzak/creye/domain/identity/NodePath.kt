@@ -6,6 +6,15 @@ package pl.lukaszburzak.creye.domain.identity
  */
 data class NodePath(val segments: List<NodeSegment>)
 
+/** True when this path lies strictly below [ancestor] in the containment hierarchy. */
+fun NodePath.isDescendantOf(ancestor: NodePath): Boolean =
+    segments.size > ancestor.segments.size &&
+        segments.take(ancestor.segments.size) == ancestor.segments
+
+/** The owning file segment of this path, or null for Module/Package paths above the file level. */
+fun NodePath.fileSegment(): NodeSegment.File? =
+    segments.filterIsInstance<NodeSegment.File>().firstOrNull()
+
 sealed interface NodeSegment {
     data class Module(val id: String) : NodeSegment
 

@@ -29,6 +29,7 @@ class DependencyGraphFileEditor(
             state = state,
             onBranchSelected = controller::selectBranch,
             onRefresh = controller::refresh,
+            onShowDiff = controller::showNodeDiff,
         )
     }
 

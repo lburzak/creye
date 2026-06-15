@@ -104,6 +104,7 @@ fun GraphCanvas(
     selected: GraphNodeId?,
     diagnosticNodes: Set<GraphNodeId>,
     onSelect: (GraphNodeId?) -> Unit,
+    onShowDiff: (GraphNodeId.Structural) -> Unit,
     onExpand: (GraphNodeId.Structural) -> Unit,
     onCollapseSelfAndSiblings: (GraphNodeId.Structural) -> Unit,
     onNodeDragStart: (GraphNodeId) -> Unit,
@@ -144,6 +145,7 @@ fun GraphCanvas(
     val currentVisible by rememberUpdatedState(visible)
     val currentLayout by rememberUpdatedState(layout)
     val currentOnSelect by rememberUpdatedState(onSelect)
+    val currentOnShowDiff by rememberUpdatedState(onShowDiff)
     val currentOnExpand by rememberUpdatedState(onExpand)
     val currentOnCollapseSelfAndSiblings by rememberUpdatedState(onCollapseSelfAndSiblings)
     val currentOnNodeDragStart by rememberUpdatedState(onNodeDragStart)
@@ -194,6 +196,9 @@ fun GraphCanvas(
     }
 
     fun nodeMenuEntries(id: GraphNodeId.Structural): List<MenuEntry> = buildList {
+        add(MenuEntry.Item("Show diff with descendants") { currentOnShowDiff(id) })
+        add(MenuEntry.Separator)
+        val beforeGoTo = size
         id.path.nearestAncestorOfType<NodeSegment.Class>()?.let {
             add(MenuEntry.Item("Go to nearest class") { goTo(GraphNodeId.Structural(it)) })
         }
@@ -203,7 +208,7 @@ fun GraphCanvas(
         id.path.nearestAncestorOfType<NodeSegment.Module>()?.let {
             add(MenuEntry.Item("Go to nearest module") { goTo(GraphNodeId.Structural(it)) })
         }
-        if (isNotEmpty()) add(MenuEntry.Separator)
+        if (size > beforeGoTo) add(MenuEntry.Separator)
         val visibleNode = currentVisible.structuralNodes.firstOrNull { it.node.path == id.path }
         if (visibleNode?.isCollapsed == true) {
             add(MenuEntry.Item("Expand") { currentOnExpand(id) })

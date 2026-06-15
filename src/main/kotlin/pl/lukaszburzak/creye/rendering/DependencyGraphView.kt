@@ -54,7 +54,11 @@ private val controlFillColor = Color(0xFF42A5F5)
  * force-directed layout is computed off the UI thread without re-running analysis.
  */
 @Composable
-fun DependencyGraphView(graph: DependencyGraph, modifier: Modifier = Modifier) {
+fun DependencyGraphView(
+    graph: DependencyGraph,
+    onShowDiff: (NodePath) -> Unit = {},
+    modifier: Modifier = Modifier,
+) {
     var expanded by remember(graph) { mutableStateOf(emptySet<NodePath>()) }
     var undoStack by remember(graph) { mutableStateOf(emptyList<Set<NodePath>>()) }
     var selected by remember(graph) { mutableStateOf<GraphNodeId?>(null) }
@@ -205,6 +209,7 @@ fun DependencyGraphView(graph: DependencyGraph, modifier: Modifier = Modifier) {
             selected = selected,
             diagnosticNodes = diagnosticNodes,
             onSelect = { selected = it },
+            onShowDiff = { id -> onShowDiff(id.path) },
             onExpand = { id -> updateExpanded(expanded + id.path) },
             onCollapseSelfAndSiblings = { id -> updateExpanded(collapseSelfAndSiblings(expanded, id.path)) },
             onUndo = ::undo,

@@ -23,6 +23,7 @@ import org.jetbrains.jewel.ui.component.Text
 import pl.lukaszburzak.creye.domain.diagnostics.Diagnostic
 import pl.lukaszburzak.creye.domain.diagnostics.DiagnosticAttachment
 import pl.lukaszburzak.creye.domain.diagnostics.Severity
+import pl.lukaszburzak.creye.domain.identity.NodePath
 
 private const val SELECT_PLACEHOLDER = "— select branch —"
 
@@ -39,6 +40,7 @@ fun GraphSurface(
     state: GraphPanelState,
     onBranchSelected: (String) -> Unit,
     onRefresh: () -> Unit,
+    onShowDiff: (NodePath) -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
         Header(state, onBranchSelected, onRefresh)
@@ -56,7 +58,7 @@ fun GraphSurface(
             }
             is AnalysisPhase.Failed -> CenteredHint("Analysis failed: ${phase.message}", color = errorColor)
             is AnalysisPhase.Ready -> Column(modifier = Modifier.fillMaxSize()) {
-                DependencyGraphView(phase.graph, modifier = Modifier.weight(1f))
+                DependencyGraphView(phase.graph, onShowDiff = onShowDiff, modifier = Modifier.weight(1f))
                 GraphDiagnostics(phase.graph.diagnostics)
             }
         }
