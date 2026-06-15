@@ -1,9 +1,23 @@
 package pl.lukaszburzak.creye.rendering.canvas
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -29,9 +43,15 @@ import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
+import org.jetbrains.jewel.ui.component.Text
 import pl.lukaszburzak.creye.domain.change.ChangeKind
 import pl.lukaszburzak.creye.domain.graph.DependencyClassification
+import pl.lukaszburzak.creye.domain.identity.NodePath
 import pl.lukaszburzak.creye.domain.identity.NodeSegment
 import pl.lukaszburzak.creye.domain.graph.GraphNodeId
 import pl.lukaszburzak.creye.rendering.layout.GraphLayout
@@ -43,6 +63,7 @@ import pl.lukaszburzak.creye.rendering.projection.VisibleGraph
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.hypot
+import kotlin.math.roundToInt
 import kotlin.math.sin
 
 /** Render palette: fixed values legible on both light and dark IDE themes. */
@@ -89,11 +110,23 @@ fun GraphCanvas(
     onNodeDragged: (GraphNodeId, LayoutPoint, LayoutPoint) -> Unit,
     onNodeDragEnd: (GraphNodeId?) -> Unit,
     onViewportChanged: (Float, Float) -> Unit,
+    onUndo: () -> Unit,
+    canUndo: Boolean,
+    onExpandAll: () -> Unit,
+    onCollapseAll: () -> Unit,
+    onExpandToClasses: () -> Unit,
+    onExpandToSymbols: () -> Unit,
+    onExpandNodeToClasses: (GraphNodeId.Structural) -> Unit,
+    onExpandNodeToSymbols: (GraphNodeId.Structural) -> Unit,
+    canExpandNodeToClasses: (GraphNodeId.Structural) -> Boolean,
+    canExpandNodeToSymbols: (GraphNodeId.Structural) -> Boolean,
     modifier: Modifier = Modifier,
 ) {
     var pan by remember { mutableStateOf(Offset.Zero) }
     var zoom by remember { mutableStateOf(1f) }
+    var canvasSize by remember { mutableStateOf(Size.Zero) }
     var dragTarget by remember { mutableStateOf<GraphNodeId?>(null) }
+    var menuRequest by remember { mutableStateOf<MenuRequest?>(null) }
     val textMeasurer = rememberTextMeasurer()
     val labelMeasurements = remember(visible, textMeasurer) {
         buildMap {
@@ -117,6 +150,16 @@ fun GraphCanvas(
     val currentOnNodeDragged by rememberUpdatedState(onNodeDragged)
     val currentOnNodeDragEnd by rememberUpdatedState(onNodeDragEnd)
     val currentOnViewportChanged by rememberUpdatedState(onViewportChanged)
+    val currentOnUndo by rememberUpdatedState(onUndo)
+    val currentCanUndo by rememberUpdatedState(canUndo)
+    val currentOnExpandAll by rememberUpdatedState(onExpandAll)
+    val currentOnCollapseAll by rememberUpdatedState(onCollapseAll)
+    val currentOnExpandToClasses by rememberUpdatedState(onExpandToClasses)
+    val currentOnExpandToSymbols by rememberUpdatedState(onExpandToSymbols)
+    val currentOnExpandNodeToClasses by rememberUpdatedState(onExpandNodeToClasses)
+    val currentOnExpandNodeToSymbols by rememberUpdatedState(onExpandNodeToSymbols)
+    val currentCanExpandNodeToClasses by rememberUpdatedState(canExpandNodeToClasses)
+    val currentCanExpandNodeToSymbols by rememberUpdatedState(canExpandNodeToSymbols)
 
     fun graphPosition(position: Offset): Offset =
         (position - pan).scaledBy(1f / zoom)
@@ -139,10 +182,61 @@ fun GraphCanvas(
         return id.takeIf { visibleNode?.isCollapsed == true }
     }
 
+    fun centerOn(id: GraphNodeId) {
+        val center = currentLayout.centerOf(id) ?: return
+        if (canvasSize == Size.Zero) return
+        pan = Offset(canvasSize.width / 2f - center.x * zoom, canvasSize.height / 2f - center.y * zoom)
+    }
+
+    fun goTo(id: GraphNodeId) {
+        currentOnSelect(id)
+        centerOn(id)
+    }
+
+    fun nodeMenuEntries(id: GraphNodeId.Structural): List<MenuEntry> = buildList {
+        id.path.nearestAncestorOfType<NodeSegment.Class>()?.let {
+            add(MenuEntry.Item("Go to nearest class") { goTo(GraphNodeId.Structural(it)) })
+        }
+        id.path.nearestAncestorOfType<NodeSegment.Package>()?.let {
+            add(MenuEntry.Item("Go to nearest package") { goTo(GraphNodeId.Structural(it)) })
+        }
+        id.path.nearestAncestorOfType<NodeSegment.Module>()?.let {
+            add(MenuEntry.Item("Go to nearest module") { goTo(GraphNodeId.Structural(it)) })
+        }
+        if (isNotEmpty()) add(MenuEntry.Separator)
+        val visibleNode = currentVisible.structuralNodes.firstOrNull { it.node.path == id.path }
+        if (visibleNode?.isCollapsed == true) {
+            add(MenuEntry.Item("Expand") { currentOnExpand(id) })
+        }
+        add(MenuEntry.Item("Collapse") { currentOnCollapseSelfAndSiblings(id) })
+        if (currentCanExpandNodeToClasses(id)) {
+            add(MenuEntry.Item("Expand down to Classes") { currentOnExpandNodeToClasses(id) })
+        }
+        if (currentCanExpandNodeToSymbols(id)) {
+            add(MenuEntry.Item("Expand down to Symbols") { currentOnExpandNodeToSymbols(id) })
+        }
+    }
+
+    fun canvasMenuEntries(): List<MenuEntry> = buildList {
+        if (currentCanUndo) {
+            add(MenuEntry.Item("Undo") { currentOnUndo() })
+            add(MenuEntry.Separator)
+        }
+        add(MenuEntry.Item("Expand All") { currentOnExpandAll() })
+        add(MenuEntry.Item("Collapse All") { currentOnCollapseAll() })
+        add(MenuEntry.Separator)
+        add(MenuEntry.Item("Expand down to Classes") { currentOnExpandToClasses() })
+        add(MenuEntry.Item("Expand down to Symbols") { currentOnExpandToSymbols() })
+    }
+
+    Box(modifier = modifier.fillMaxSize()) {
     Canvas(
-        modifier = modifier
+        modifier = Modifier
             .fillMaxSize()
-            .onSizeChanged { currentOnViewportChanged(it.width.toFloat(), it.height.toFloat()) }
+            .onSizeChanged {
+                canvasSize = Size(it.width.toFloat(), it.height.toFloat())
+                currentOnViewportChanged(it.width.toFloat(), it.height.toFloat())
+            }
             .pointerInput(Unit) {
                 detectTapGestures(
                     onTap = { currentOnSelect(hit(it)) },
@@ -193,7 +287,11 @@ fun GraphCanvas(
                         when {
                             event.type == PointerEventType.Press && event.buttons.isSecondaryPressed -> {
                                 val position = event.changes.firstOrNull()?.position ?: continue
-                                (hit(position) as? GraphNodeId.Structural)?.let(currentOnCollapseSelfAndSiblings)
+                                val entries = when (val target = hit(position)) {
+                                    is GraphNodeId.Structural -> nodeMenuEntries(target)
+                                    else -> canvasMenuEntries()
+                                }
+                                menuRequest = MenuRequest(position, entries)
                                 event.changes.forEach { it.consume() }
                             }
                             event.type == PointerEventType.Scroll -> {
@@ -226,6 +324,79 @@ fun GraphCanvas(
             }
         }
     }
+        menuRequest?.let { request ->
+            ContextMenu(request = request, onDismiss = { menuRequest = null })
+        }
+    }
+}
+
+/** Right-click menu entry; [Separator] groups related actions visually. */
+private sealed interface MenuEntry {
+    data class Item(val label: String, val onClick: () -> Unit) : MenuEntry
+    data object Separator : MenuEntry
+}
+
+private data class MenuRequest(val position: Offset, val entries: List<MenuEntry>)
+
+/** Deepest ancestor-or-self path whose last segment is of type [T], or null if none. */
+private inline fun <reified T : NodeSegment> NodePath.nearestAncestorOfType(): NodePath? {
+    for (i in segments.indices.reversed()) {
+        if (segments[i] is T) return NodePath(segments.subList(0, i + 1))
+    }
+    return null
+}
+
+/** Self-contained popup so context menus do not depend on an ambient menu representation. */
+@Composable
+private fun ContextMenu(request: MenuRequest, onDismiss: () -> Unit) {
+    Popup(
+        offset = IntOffset(request.position.x.roundToInt(), request.position.y.roundToInt()),
+        onDismissRequest = onDismiss,
+        properties = PopupProperties(focusable = true),
+    ) {
+        Column(
+            modifier = Modifier
+                .background(MenuPalette.background, RoundedCornerShape(4.dp))
+                .border(1.dp, MenuPalette.border, RoundedCornerShape(4.dp))
+                .padding(vertical = 4.dp)
+                .width(IntrinsicSize.Max),
+        ) {
+            for (entry in request.entries) {
+                when (entry) {
+                    is MenuEntry.Separator -> Box(
+                        Modifier.fillMaxWidth().height(1.dp).padding(horizontal = 4.dp).background(MenuPalette.border),
+                    )
+                    is MenuEntry.Item -> MenuItemRow(entry.label) {
+                        entry.onClick()
+                        onDismiss()
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MenuItemRow(label: String, onClick: () -> Unit) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val hovered by interactionSource.collectIsHoveredAsState()
+    Text(
+        text = label,
+        color = MenuPalette.label,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .hoverable(interactionSource)
+            .background(if (hovered) MenuPalette.hover else Color.Transparent)
+            .padding(horizontal = 14.dp, vertical = 5.dp),
+    )
+}
+
+private object MenuPalette {
+    val background = Color(0xFF3C3F41)
+    val border = Color(0xFF555759)
+    val hover = Color(0xFF2F65CA)
+    val label = Color(0xFFECEFF1)
 }
 
 private fun DrawScope.drawHierarchyEdges(visible: VisibleGraph, layout: GraphLayout) {

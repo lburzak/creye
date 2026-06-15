@@ -32,6 +32,7 @@ import pl.lukaszburzak.creye.domain.diagnostics.DiagnosticAttachment
 import pl.lukaszburzak.creye.domain.graph.DependencyGraph
 import pl.lukaszburzak.creye.domain.graph.GraphNodeId
 import pl.lukaszburzak.creye.domain.identity.NodePath
+import pl.lukaszburzak.creye.domain.identity.NodeSegment
 import pl.lukaszburzak.creye.rendering.canvas.GraphCanvas
 import pl.lukaszburzak.creye.rendering.layout.GraphLayout
 import pl.lukaszburzak.creye.rendering.layout.GraphSimulationViewport
@@ -55,7 +56,41 @@ private val controlFillColor = Color(0xFF42A5F5)
 @Composable
 fun DependencyGraphView(graph: DependencyGraph, modifier: Modifier = Modifier) {
     var expanded by remember(graph) { mutableStateOf(emptySet<NodePath>()) }
+    var undoStack by remember(graph) { mutableStateOf(emptyList<Set<NodePath>>()) }
     var selected by remember(graph) { mutableStateOf<GraphNodeId?>(null) }
+
+    // Every expansion change records the prior frontier so the canvas Undo can restore it.
+    fun updateExpanded(next: Set<NodePath>) {
+        if (next == expanded) return
+        undoStack = undoStack + listOf(expanded)
+        expanded = next
+    }
+    fun undo() {
+        val previous = undoStack.lastOrNull() ?: return
+        undoStack = undoStack.dropLast(1)
+        expanded = previous
+    }
+
+    val parentsWithChildren = remember(graph) {
+        graph.structuralNodes.mapNotNullTo(mutableSetOf()) { it.path.parent() }
+    }
+    // Deepest containment rank among each node's strict descendants; drives "if applicable".
+    val descendantMaxRank = remember(graph) {
+        val paths = graph.structuralNodes.map { it.path }
+        paths.associateWith { ancestor ->
+            paths.filter { it.isDescendantOf(ancestor) }.maxOfOrNull { it.segments.last().rank() } ?: -1
+        }
+    }
+    fun expandToRank(maxExclusive: Int) =
+        updateExpanded(parentsWithChildren.filterTo(mutableSetOf()) { it.segments.last().rank() < maxExclusive })
+    fun expandSubtreeToRank(path: NodePath, maxExclusive: Int) =
+        updateExpanded(
+            expanded + parentsWithChildren.filter {
+                (it == path || it.isDescendantOf(path)) && it.segments.last().rank() < maxExclusive
+            },
+        )
+    fun canExpandSubtreeToRank(path: NodePath, target: Int): Boolean =
+        path.segments.last().rank() < target && (descendantMaxRank[path] ?: -1) >= target
     var layoutState by remember(graph) { mutableStateOf<GraphLayoutState?>(null) }
     var simulation by remember(graph) { mutableStateOf<LivingGraphSimulation?>(null) }
     var liveLayout by remember(graph) { mutableStateOf<GraphLayout?>(null) }
@@ -170,8 +205,18 @@ fun DependencyGraphView(graph: DependencyGraph, modifier: Modifier = Modifier) {
             selected = selected,
             diagnosticNodes = diagnosticNodes,
             onSelect = { selected = it },
-            onExpand = { id -> expanded = expanded + id.path },
-            onCollapseSelfAndSiblings = { id -> expanded = collapseSelfAndSiblings(expanded, id.path) },
+            onExpand = { id -> updateExpanded(expanded + id.path) },
+            onCollapseSelfAndSiblings = { id -> updateExpanded(collapseSelfAndSiblings(expanded, id.path)) },
+            onUndo = ::undo,
+            canUndo = undoStack.isNotEmpty(),
+            onExpandAll = { updateExpanded(parentsWithChildren) },
+            onCollapseAll = { updateExpanded(emptySet()) },
+            onExpandToClasses = { expandToRank(CLASS_RANK) },
+            onExpandToSymbols = { expandToRank(SYMBOL_RANK) },
+            onExpandNodeToClasses = { id -> expandSubtreeToRank(id.path, CLASS_RANK) },
+            onExpandNodeToSymbols = { id -> expandSubtreeToRank(id.path, SYMBOL_RANK) },
+            canExpandNodeToClasses = { id -> canExpandSubtreeToRank(id.path, CLASS_RANK) },
+            canExpandNodeToSymbols = { id -> canExpandSubtreeToRank(id.path, SYMBOL_RANK) },
             onNodeDragStart = { id -> simulation?.startDrag(id) },
             onNodeDragged = { id, center, delta ->
                 simulation?.let {
@@ -303,6 +348,15 @@ internal fun collapseSelfAndSiblings(expanded: Set<NodePath>, path: NodePath): S
 private fun NodePath.parent(): NodePath? =
     if (segments.size <= 1) null else NodePath(segments.subList(0, segments.size - 1))
 
+/** Containment depth used to expand the frontier down to a target structural level. */
+private fun NodeSegment.rank(): Int = when (this) {
+    is NodeSegment.Module -> 0
+    is NodeSegment.Package -> 1
+    is NodeSegment.File -> 2
+    is NodeSegment.Class -> 3
+    is NodeSegment.Symbol -> 4
+}
+
 private fun NodePath.isDescendantOf(ancestor: NodePath): Boolean =
     segments.size > ancestor.segments.size &&
         segments.take(ancestor.segments.size) == ancestor.segments
@@ -314,6 +368,8 @@ private data class GraphLayoutState(
     val messages: List<String>,
 )
 
+private const val CLASS_RANK = 3
+private const val SYMBOL_RANK = 4
 private const val FRAME_NANOS = 16_666_667f
 private const val DEFAULT_CENTER_GRAVITY = 0.010f
 private const val MAX_CENTER_GRAVITY = 0.030f

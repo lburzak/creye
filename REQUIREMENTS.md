@@ -17,7 +17,7 @@
   - Children MUST be clustered
   - Expanded node MUST remain visible
   - Children MUST be connected to expanded node via edges
-- MUST collapse itself, and all siblings on right-click
+- MUST collapse itself, and all siblings via the node context menu's Collapse action (see Context Menus)
 - MUST contain an icon, indicating it's type
 - Color MUST indicate it's diff
   - Modified -> Blue
@@ -110,3 +110,23 @@ The key words "MUST", "MUST NOT", "SHOULD", "SHOULD NOT", "MAY", and "OPTIONAL" 
 - Implementations and documentation SHOULD use "damped force propagation" for the ripple-like movement through connected nodes.
 - Implementations and documentation SHOULD use "spring-like edge forces" for the mechanism that transfers motion between connected nodes.
 - Implementations and documentation SHOULD use "drift" for slow global movement of the whole graph or its components.
+
+
+# Context Menus
+- Right-click MUST open a context menu
+  - Right-click on a node MUST open the Node menu
+  - Right-click on empty canvas MUST open the Graph canvas menu
+- Node
+	- Go to nearest class
+	- Go to nearest package
+	- Go to nearest module
+	- Expand
+	- Collapse
+	- Expand down to Classes (if applicable)
+	- Expand down to Symbols (if applicable)
+- Graph canvas
+	- Undo
+	- Expand All
+	- Collapse All
+	- Expand down to Classes
+	- Expand down to Symbols

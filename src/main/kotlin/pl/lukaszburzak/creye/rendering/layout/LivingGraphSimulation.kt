@@ -25,6 +25,8 @@ data class LivingGraphSimulationConfig(
     val dragVelocityTransfer: Float = 0.75f,
     val propagationTransfer: Float = 0.18f,
     val viewportPadding: Float = LayoutMetrics.MARGIN,
+    /** Containment region size as a multiple of the viewport, centered on it. >1 lets the graph spread off-screen (reachable by pan/zoom) while staying bounded. */
+    val boundaryScale: Float = 2.5f,
     val minNodeDistance: Float = LayoutMetrics.NODE_DIAMETER + 8f,
 )
 
@@ -198,12 +200,18 @@ class LivingGraphSimulation(
 
     private fun contain(body: SimulationBody) {
         val view = viewport ?: return
-        val minX = LayoutMetrics.NODE_RADIUS + config.viewportPadding
-        val minY = LayoutMetrics.NODE_RADIUS + config.viewportPadding
-        val maxX = max(minX, view.width - LayoutMetrics.NODE_RADIUS - config.viewportPadding)
-        val maxY = max(minY, view.height - LayoutMetrics.NODE_RADIUS - config.viewportPadding)
-        body.position.x = containAxis(body.position.x, minX, maxX) { body.velocity.x *= -0.18f }
-        body.position.y = containAxis(body.position.y, minY, maxY) { body.velocity.y *= -0.18f }
+        val centerX = view.width / 2f
+        val centerY = view.height / 2f
+        val halfWidth = max(
+            LayoutMetrics.NODE_RADIUS,
+            view.width / 2f * config.boundaryScale - LayoutMetrics.NODE_RADIUS - config.viewportPadding,
+        )
+        val halfHeight = max(
+            LayoutMetrics.NODE_RADIUS,
+            view.height / 2f * config.boundaryScale - LayoutMetrics.NODE_RADIUS - config.viewportPadding,
+        )
+        body.position.x = containAxis(body.position.x, centerX - halfWidth, centerX + halfWidth) { body.velocity.x *= -0.18f }
+        body.position.y = containAxis(body.position.y, centerY - halfHeight, centerY + halfHeight) { body.velocity.y *= -0.18f }
     }
 
     private fun containAxis(value: Float, minValue: Float, maxValue: Float, onBounce: () -> Unit): Float = when {

@@ -111,7 +111,7 @@ class LivingGraphSimulationTest {
         val simulation = LivingGraphSimulation(
             visible = visibleGraph(listOf(symbolA)),
             initialCenters = mapOf(a to LayoutPoint(185f, 100f)),
-            config = quietConfig(damping = 1f, viewportPadding = 0f, maxVelocity = 100f),
+            config = quietConfig(damping = 1f, viewportPadding = 0f, maxVelocity = 100f, boundaryScale = 1f),
         )
         simulation.setViewport(width = 200f, height = 200f)
 
@@ -119,6 +119,24 @@ class LivingGraphSimulationTest {
         repeat(4) { simulation.step() }
 
         assertTrue(simulation.centerOf(a).x <= 200f - LayoutMetrics.NODE_RADIUS)
+    }
+
+    @Test
+    fun `boundary scale lets nodes spread beyond the viewport while staying bounded`() {
+        val simulation = LivingGraphSimulation(
+            visible = visibleGraph(listOf(symbolA)),
+            initialCenters = mapOf(a to LayoutPoint(185f, 100f)),
+            config = quietConfig(damping = 1f, viewportPadding = 0f, maxVelocity = 100f, boundaryScale = 2f),
+        )
+        simulation.setViewport(width = 200f, height = 200f)
+
+        simulation.disturb(a, LayoutPoint(80f, 0f))
+        repeat(8) { simulation.step() }
+
+        val x = simulation.centerOf(a).x
+        // boundaryScale = 2 → region half-width 100*2 - radius, centered: max x = 100 + (200 - 18) = 282.
+        assertTrue(x > 200f - LayoutMetrics.NODE_RADIUS)
+        assertTrue(x <= 282f)
     }
 
     @Test
@@ -203,6 +221,7 @@ class LivingGraphSimulationTest {
         driftStrength: Float = 0f,
         viewportPadding: Float = LayoutMetrics.MARGIN,
         maxVelocity: Float = 18f,
+        boundaryScale: Float = 2.5f,
     ): LivingGraphSimulationConfig =
         LivingGraphSimulationConfig(
             nodeRepulsion = nodeRepulsion,
@@ -213,5 +232,6 @@ class LivingGraphSimulationTest {
             collisionStrength = 0f,
             maxVelocity = maxVelocity,
             viewportPadding = viewportPadding,
+            boundaryScale = boundaryScale,
         )
 }
