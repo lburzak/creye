@@ -26,6 +26,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.jetbrains.jewel.ui.component.CheckboxRow
 import org.jetbrains.jewel.ui.component.OutlinedButton
 import org.jetbrains.jewel.ui.component.Text
 import pl.lukaszburzak.creye.domain.diagnostics.DiagnosticAttachment
@@ -104,8 +105,9 @@ fun DependencyGraphView(
     var centerGravity by remember(graph) { mutableStateOf(DEFAULT_CENTER_GRAVITY) }
     var nodeAttraction by remember(graph) { mutableStateOf(DEFAULT_NODE_ATTRACTION) }
     var nodeRepulsion by remember(graph) { mutableStateOf(DEFAULT_NODE_REPULSION) }
+    var showExternal by remember(graph) { mutableStateOf(true) }
 
-    val visible = remember(graph, expanded) { projectVisibleGraph(graph, expanded) }
+    val visible = remember(graph, expanded, showExternal) { projectVisibleGraph(graph, expanded, showExternal) }
     val simulationConfig = remember(centerGravity, nodeAttraction, nodeRepulsion) {
         LivingGraphSimulationConfig(
             nodeRepulsion = nodeRepulsion,
@@ -241,6 +243,11 @@ fun DependencyGraphView(
             horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            CheckboxRow(
+                text = "Show External nodes",
+                checked = showExternal,
+                onCheckedChange = { showExternal = it },
+            )
             SimulationSliderControl(
                 label = "Gravity",
                 value = centerGravity,

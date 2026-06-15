@@ -36,6 +36,14 @@
 - Dependency edges MUST preserve direction, classification, deduplication, and underlying-edge traceability while conflated
 - Hierarchy edges MUST be render-derived from visible parent-child structural nodes and MUST be visually distinct from dependency edges
 
+## External nodes
+
+- External nodes represent dependencies on symbols outside the project
+- The graph MUST provide a "Show External nodes" toggle
+  - When off, external nodes and edges targeting them MUST be hidden
+  - When off, internal structure and its dependency edges MUST remain unaffected
+  - Default MUST be on
+
 # Diff interpretation
 
 - When file is deleted, it's module MUST be resolved to the one it belongs to in comparison target branch

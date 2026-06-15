@@ -196,6 +196,21 @@ class VisibleGraphProjectionTest {
     }
 
     @Test
+    fun `external nodes and edges are hidden when showExternal is off`() {
+        val toExternal = edge(symbolA, GraphNodeId.External(external), DependencyClassification.EXTERNAL)
+        val toInternal = edge(symbolA, GraphNodeId.Structural(symbolB))
+        val graph = graphOf(listOf(toExternal, toInternal), listOf(ExternalNode(external)))
+
+        val visible = projectVisibleGraph(graph, expanded = emptySet(), showExternal = false)
+
+        assertTrue(visible.externalNodes.isEmpty())
+        assertTrue(visible.edges.none { it.target is GraphNodeId.External })
+        val edge = visible.edges.single()
+        assertEquals(GraphNodeId.Structural(moduleA), edge.source)
+        assertEquals(GraphNodeId.Structural(moduleB), edge.target)
+    }
+
+    @Test
     fun `changed state passes through on visible nodes`() {
         val changed = StructuralNode(symbolA, "a", ChangeKind.MODIFIED)
         val graph = DependencyGraph(

@@ -54,13 +54,25 @@ data class VisibleGraph(
  * the expansion frontier to the visible graph. Holds no state of its own; recomputed
  * by recomposition whenever [expanded] changes (ADR-009).
  */
-fun projectVisibleGraph(graph: DependencyGraph, expanded: Set<NodePath>): VisibleGraph {
+fun projectVisibleGraph(
+    graph: DependencyGraph,
+    expanded: Set<NodePath>,
+    showExternal: Boolean = true,
+): VisibleGraph {
     val structuralPaths = graph.structuralNodes.mapTo(linkedSetOf()) { it.path }
     val childrenByParent = structuralPaths.groupBy { it.parent() }
     val visiblePaths = structuralPaths
         .filterTo(linkedSetOf()) { path -> path.isVisible(expanded) }
 
-    val lifted = graph.edges.groupBy { edge ->
+    // The external toggle hides external symbol nodes and any edge that targets one,
+    // leaving internal structure and its dependency edges untouched (ADR-009).
+    val sourceEdges = if (showExternal) {
+        graph.edges
+    } else {
+        graph.edges.filter { it.target !is GraphNodeId.External }
+    }
+
+    val lifted = sourceEdges.groupBy { edge ->
         edge.source.liftTo(visiblePaths) to edge.target.liftTo(visiblePaths)
     }
 
@@ -108,7 +120,7 @@ fun projectVisibleGraph(graph: DependencyGraph, expanded: Set<NodePath>): Visibl
 
     return VisibleGraph(
         structuralNodes = structuralNodes,
-        externalNodes = graph.externalNodes,
+        externalNodes = if (showExternal) graph.externalNodes else emptyList(),
         edges = edges,
         hierarchyEdges = hierarchyEdges,
     )
