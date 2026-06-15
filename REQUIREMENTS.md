@@ -139,3 +139,6 @@ The key words "MUST", "MUST NOT", "SHOULD", "SHOULD NOT", "MAY", and "OPTIONAL" 
 	- Collapse All
 	- Expand down to Classes
 	- Expand down to Symbols
+
+# Combined Diff View
+- MUST be opened side-by-side to graph

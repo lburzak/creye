@@ -3,12 +3,16 @@ package pl.lukaszburzak.creye.ide
 import com.intellij.diff.tools.combined.CombinedBlockProducer
 import com.intellij.diff.tools.combined.CombinedDiffManager
 import com.intellij.diff.tools.combined.CombinedPathBlockId
+import com.intellij.openapi.actionSystem.ActionManager
+import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.ui.DialogWrapper
+import com.intellij.openapi.Disposable
 import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.vcs.changes.Change
 import com.intellij.openapi.vcs.changes.ChangesUtil
 import com.intellij.openapi.vcs.changes.actions.diff.ChangeDiffRequestProducer
+import com.intellij.ui.components.JBLabel
+import com.intellij.util.ui.JBUI
 import git4idea.changes.GitChangeUtils
 import git4idea.history.GitHistoryUtils
 import git4idea.repo.GitRepositoryManager
@@ -16,12 +20,23 @@ import pl.lukaszburzak.creye.domain.graph.DependencyGraph
 import pl.lukaszburzak.creye.domain.identity.NodePath
 import pl.lukaszburzak.creye.domain.identity.fileSegment
 import pl.lukaszburzak.creye.domain.identity.isDescendantOf
+import com.intellij.icons.AllIcons
+import com.intellij.openapi.actionSystem.ActionPlaces
+import com.intellij.openapi.actionSystem.ActionUpdateThread
+import com.intellij.openapi.actionSystem.AnAction
+import com.intellij.openapi.actionSystem.AnActionEvent
+import java.awt.BorderLayout
+import javax.swing.JComponent
+import javax.swing.JPanel
 
 /**
- * Opens a combined diff (all files stacked in one scroll, like a merge-request review) for
+ * Builds a combined diff (all files stacked in one scroll, like a merge-request review) for
  * the files owned by a node and its descendants, comparing the working directory against the
  * merge base of HEAD and the selected branch — the same baseline the graph (ADR-003) is
  * computed from. Lives in the ide layer so the rendering surface stays git-free (ADR-011).
+ *
+ * The resulting panel is embedded side-by-side with the graph (REQUIREMENTS: Combined Diff
+ * View) rather than opened as a separate window.
  */
 class NodeDiffPresenter(private val project: Project) {
 
@@ -68,8 +83,16 @@ class NodeDiffPresenter(private val project: Project) {
         return Result.Ready(matched)
     }
 
-    /** EDT: opens a combined diff window showing every change at once, stacked vertically. */
-    fun show(changes: List<Change>, title: String) {
+    /** An embeddable combined-diff view paired with the disposable that releases its diff processor. */
+    class Panel(val component: JComponent, val disposable: Disposable)
+
+    /**
+     * EDT: builds a combined-diff component showing every change at once, stacked vertically,
+     * topped by a header with the title and a close button. Returns null when nothing renders;
+     * the caller mounts [Panel.component] beside the graph and disposes [Panel.disposable] when
+     * the view is replaced or the editor closes.
+     */
+    fun createPanel(changes: List<Change>, title: String, onClose: () -> Unit): Panel? {
         val processor = CombinedDiffManager.getInstance(project).createProcessor()
         val blocks = changes.mapNotNull { change ->
             val producer = ChangeDiffRequestProducer.create(project, change) ?: return@mapNotNull null
@@ -78,22 +101,29 @@ class NodeDiffPresenter(private val project: Project) {
         }
         if (blocks.isEmpty()) {
             Disposer.dispose(processor.disposable)
-            return
+            return null
         }
         processor.setBlocks(blocks)
 
-        val dialog = object : DialogWrapper(project, true) {
-            init {
-                this.title = title
-                isModal = false
-                Disposer.register(disposable, processor.disposable)
-                init()
-            }
+        val container = JPanel(BorderLayout())
+        container.add(buildHeader(title, onClose), BorderLayout.NORTH)
+        container.add(processor.component, BorderLayout.CENTER)
+        return Panel(container, processor.disposable)
+    }
 
-            override fun createCenterPanel() = processor.component
-            override fun getPreferredFocusedComponent() = processor.preferredFocusedComponent
-            override fun getDimensionServiceKey() = "pl.lukaszburzak.creye.NodeDiff"
+    private fun buildHeader(title: String, onClose: () -> Unit): JComponent {
+        val header = JPanel(BorderLayout())
+        header.border = JBUI.Borders.empty(4, 8)
+        header.add(JBLabel(title), BorderLayout.WEST)
+
+        val closeAction = object : AnAction("Close Diff", "Hide the combined diff view", AllIcons.Actions.Close) {
+            override fun actionPerformed(e: AnActionEvent) = onClose()
+            override fun getActionUpdateThread() = ActionUpdateThread.EDT
         }
-        dialog.show()
+        val toolbar = ActionManager.getInstance()
+            .createActionToolbar(ActionPlaces.UNKNOWN, DefaultActionGroup(closeAction), true)
+        toolbar.targetComponent = header
+        header.add(toolbar.component, BorderLayout.EAST)
+        return header
     }
 }

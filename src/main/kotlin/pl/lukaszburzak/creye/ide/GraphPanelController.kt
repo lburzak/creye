@@ -4,6 +4,7 @@ import com.intellij.openapi.application.EDT
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.Messages
+import com.intellij.openapi.vcs.changes.Change
 import git4idea.repo.GitRepositoryManager
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -34,6 +35,16 @@ class GraphPanelController(
 ) {
     private val _state = MutableStateFlow(GraphPanelState())
     val state: StateFlow<GraphPanelState> = _state.asStateFlow()
+
+    /**
+     * The combined diff to mount beside the graph (REQUIREMENTS: Combined Diff View), or null
+     * when no diff is shown. The editor observes this and builds/disposes the view; carries the
+     * git [Change] list so the rendering layer stays git-free (ADR-011).
+     */
+    data class DiffRequest(val changes: List<Change>, val title: String)
+
+    private val _diffRequest = MutableStateFlow<DiffRequest?>(null)
+    val diffRequest: StateFlow<DiffRequest?> = _diffRequest.asStateFlow()
 
     private var analysis: Deferred<DependencyGraph>? = null
     private val diffPresenter = NodeDiffPresenter(project)
@@ -86,8 +97,9 @@ class GraphPanelController(
             val result = withContext(Dispatchers.Default) { diffPresenter.resolve(node, graph, branch) }
             withContext(Dispatchers.EDT) {
                 when (result) {
-                    is NodeDiffPresenter.Result.Ready ->
-                        diffPresenter.show(result.changes, "Diff vs '$branch' (${result.changes.size} files)")
+                    is NodeDiffPresenter.Result.Ready -> _diffRequest.value = DiffRequest(
+                        result.changes, "Diff vs '$branch' (${result.changes.size} files)",
+                    )
                     is NodeDiffPresenter.Result.Empty -> Messages.showInfoMessage(
                         project, "No changes in the selected node against '${result.branch}'.", "Show Diff",
                     )
@@ -99,7 +111,14 @@ class GraphPanelController(
         }
     }
 
+    /** Hides the combined diff view, e.g. from its close button. */
+    fun closeDiff() {
+        _diffRequest.value = null
+    }
+
     private fun runAnalysis(branch: String) {
+        // A diff resolved against the previous graph would be stale once analysis re-runs.
+        _diffRequest.value = null
         analysis?.cancel()
         val deferred = GraphAnalysisService.getInstance(project).analyze(branch)
         analysis = deferred
