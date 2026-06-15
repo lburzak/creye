@@ -19,6 +19,7 @@ import pl.lukaszburzak.creye.domain.graph.DependencyGraph
 import pl.lukaszburzak.creye.domain.identity.NodePath
 import pl.lukaszburzak.creye.orchestration.GraphAnalysisService
 import pl.lukaszburzak.creye.rendering.AnalysisPhase
+import pl.lukaszburzak.creye.rendering.ForceSettings
 import pl.lukaszburzak.creye.rendering.GraphPanelState
 
 /**
@@ -68,6 +69,13 @@ class GraphPanelController(
 
     fun refresh() {
         _state.value.selectedBranch?.let(::runAnalysis)
+    }
+
+    /** Persisted force-slider values (ADR-013), restored when the panel opens. */
+    fun forceSettings(): ForceSettings = DependencyGraphSettings.getInstance(project).forceSettings
+
+    fun updateForceSettings(settings: ForceSettings) {
+        DependencyGraphSettings.getInstance(project).forceSettings = settings
     }
 
     /** Opens the IDE diff for a clicked node and its descendants against the selected branch. */

@@ -58,6 +58,8 @@ private val controlFillColor = Color(0xFF42A5F5)
 fun DependencyGraphView(
     graph: DependencyGraph,
     onShowDiff: (NodePath) -> Unit = {},
+    forceSettings: ForceSettings = ForceSettings.DEFAULT,
+    onForceSettingsChange: (ForceSettings) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     var expanded by remember(graph) { mutableStateOf(emptySet<NodePath>()) }
@@ -102,10 +104,13 @@ fun DependencyGraphView(
     var liveVisible by remember(graph) { mutableStateOf<VisibleGraph?>(null) }
     var viewport by remember(graph) { mutableStateOf<GraphSimulationViewport?>(null) }
     var paused by remember(graph) { mutableStateOf(false) }
-    var centerGravity by remember(graph) { mutableStateOf(DEFAULT_CENTER_GRAVITY) }
-    var nodeAttraction by remember(graph) { mutableStateOf(DEFAULT_NODE_ATTRACTION) }
-    var nodeRepulsion by remember(graph) { mutableStateOf(DEFAULT_NODE_REPULSION) }
+    var centerGravity by remember(graph) { mutableStateOf(forceSettings.gravity) }
+    var nodeAttraction by remember(graph) { mutableStateOf(forceSettings.attraction) }
+    var nodeRepulsion by remember(graph) { mutableStateOf(forceSettings.repulsion) }
     var showExternal by remember(graph) { mutableStateOf(true) }
+
+    // Persist any slider change so a readable layout survives sessions and rebuilds.
+    fun persistForces() = onForceSettingsChange(ForceSettings(centerGravity, nodeAttraction, nodeRepulsion))
 
     val visible = remember(graph, expanded, showExternal) { projectVisibleGraph(graph, expanded, showExternal) }
     val simulationConfig = remember(centerGravity, nodeAttraction, nodeRepulsion) {
@@ -188,6 +193,8 @@ fun DependencyGraphView(
 
     LaunchedEffect(visible) {
         var lastFrameNanos = 0L
+        var lastSimulation: LivingGraphSimulation? = null
+        var lowEnergyFrames = 0
         while (true) {
             val frameNanos = withFrameNanos { it }
             val deltaTime = if (lastFrameNanos == 0L) {
@@ -198,8 +205,20 @@ fun DependencyGraphView(
             lastFrameNanos = frameNanos
             val currentSimulation = simulation
             if (!paused && currentSimulation != null && liveVisible == visible) {
-                currentSimulation.step(deltaTime)
-                liveLayout = currentSimulation.layout()
+                // A fresh simulation must warm up; reset the settle counter on swap.
+                if (currentSimulation !== lastSimulation) {
+                    lastSimulation = currentSimulation
+                    lowEnergyFrames = 0
+                }
+                val energetic = currentSimulation.kineticEnergy() > QUIESCENCE_ENERGY
+                // Step while warming up or while there is motion; once the graph holds
+                // still for QUIESCENCE_FRAMES it sleeps and stops drifting under the cursor.
+                // Interaction (drag/disturb) re-injects velocity → energetic → wakes it.
+                if (lowEnergyFrames < QUIESCENCE_FRAMES || energetic) {
+                    currentSimulation.step(deltaTime)
+                    liveLayout = currentSimulation.layout()
+                    lowEnergyFrames = if (currentSimulation.kineticEnergy() > QUIESCENCE_ENERGY) 0 else lowEnergyFrames + 1
+                }
             }
         }
     }
@@ -251,23 +270,23 @@ fun DependencyGraphView(
             SimulationSliderControl(
                 label = "Gravity",
                 value = centerGravity,
-                onValueChange = { centerGravity = it },
-                valueRange = 0f..MAX_CENTER_GRAVITY,
-                valueLabel = percentLabel(centerGravity, MAX_CENTER_GRAVITY),
+                onValueChange = { centerGravity = it; persistForces() },
+                valueRange = 0f..ForceSettings.MAX_GRAVITY,
+                valueLabel = percentLabel(centerGravity, ForceSettings.MAX_GRAVITY),
             )
             SimulationSliderControl(
                 label = "Attraction",
                 value = nodeAttraction,
-                onValueChange = { nodeAttraction = it },
-                valueRange = 0f..MAX_NODE_ATTRACTION,
-                valueLabel = percentLabel(nodeAttraction, MAX_NODE_ATTRACTION),
+                onValueChange = { nodeAttraction = it; persistForces() },
+                valueRange = 0f..ForceSettings.MAX_ATTRACTION,
+                valueLabel = percentLabel(nodeAttraction, ForceSettings.MAX_ATTRACTION),
             )
             SimulationSliderControl(
                 label = "Repulsion",
                 value = nodeRepulsion,
-                onValueChange = { nodeRepulsion = it },
-                valueRange = 0f..MAX_NODE_REPULSION,
-                valueLabel = percentLabel(nodeRepulsion, MAX_NODE_REPULSION),
+                onValueChange = { nodeRepulsion = it; persistForces() },
+                valueRange = 0f..ForceSettings.MAX_REPULSION,
+                valueLabel = percentLabel(nodeRepulsion, ForceSettings.MAX_REPULSION),
             )
             OutlinedButton(onClick = { paused = !paused }) {
                 Text(if (paused) "Resume" else "Pause")
@@ -383,9 +402,8 @@ private data class GraphLayoutState(
 private const val CLASS_RANK = 3
 private const val SYMBOL_RANK = 4
 private const val FRAME_NANOS = 16_666_667f
-private const val DEFAULT_CENTER_GRAVITY = 0.010f
-private const val MAX_CENTER_GRAVITY = 0.030f
-private const val DEFAULT_NODE_ATTRACTION = 0.028f
-private const val MAX_NODE_ATTRACTION = 0.080f
-private const val DEFAULT_NODE_REPULSION = 3_200f
-private const val MAX_NODE_REPULSION = 8_000f
+
+// Total kinetic energy below which the graph is treated as still (sum of per-node speed²).
+private const val QUIESCENCE_ENERGY = 0.05f
+// Consecutive low-energy frames before the simulation sleeps (~0.5s at 60fps).
+private const val QUIESCENCE_FRAMES = 30

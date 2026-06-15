@@ -41,6 +41,8 @@ fun GraphSurface(
     onBranchSelected: (String) -> Unit,
     onRefresh: () -> Unit,
     onShowDiff: (NodePath) -> Unit,
+    forceSettings: ForceSettings,
+    onForceSettingsChange: (ForceSettings) -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
         Header(state, onBranchSelected, onRefresh)
@@ -58,7 +60,13 @@ fun GraphSurface(
             }
             is AnalysisPhase.Failed -> CenteredHint("Analysis failed: ${phase.message}", color = errorColor)
             is AnalysisPhase.Ready -> Column(modifier = Modifier.fillMaxSize()) {
-                DependencyGraphView(phase.graph, onShowDiff = onShowDiff, modifier = Modifier.weight(1f))
+                DependencyGraphView(
+                    phase.graph,
+                    onShowDiff = onShowDiff,
+                    forceSettings = forceSettings,
+                    onForceSettingsChange = onForceSettingsChange,
+                    modifier = Modifier.weight(1f),
+                )
                 GraphDiagnostics(phase.graph.diagnostics)
             }
         }

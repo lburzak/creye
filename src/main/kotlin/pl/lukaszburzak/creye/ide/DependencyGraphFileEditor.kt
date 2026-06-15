@@ -30,6 +30,8 @@ class DependencyGraphFileEditor(
             onBranchSelected = controller::selectBranch,
             onRefresh = controller::refresh,
             onShowDiff = controller::showNodeDiff,
+            forceSettings = controller.forceSettings(),
+            onForceSettingsChange = controller::updateForceSettings,
         )
     }
 

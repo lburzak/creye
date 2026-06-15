@@ -18,7 +18,9 @@ data class LivingGraphSimulationConfig(
     val springStrength: Float = 0.028f,
     val damping: Float = 0.88f,
     val gravity: Float = 0.010f,
-    val driftStrength: Float = 0.018f,
+    // Off by default: a perpetual drift force never decays, so the graph would never
+    // settle and nodes stay hard to click. Opt in per-config for a "living" effect.
+    val driftStrength: Float = 0f,
     val driftFrequency: Float = 0.025f,
     val collisionStrength: Float = 0.42f,
     val maxVelocity: Float = 18f,
