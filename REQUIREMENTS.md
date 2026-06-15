@@ -117,6 +117,7 @@ The key words "MUST", "MUST NOT", "SHOULD", "SHOULD NOT", "MAY", and "OPTIONAL" 
   - Right-click on a node MUST open the Node menu
   - Right-click on empty canvas MUST open the Graph canvas menu
 - Node
+  - Show diff with descendants
 	- Go to nearest class
 	- Go to nearest package
 	- Go to nearest module
