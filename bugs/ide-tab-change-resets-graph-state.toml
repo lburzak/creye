@@ -1,0 +1,24 @@
+expected = "Switching IDE editor tabs away from the dependency graph and back should preserve graph view state: expand/collapse frontier, selection, node positions (live layout), pan/zoom, simulation sliders, and the Show External toggle."
+actual = "Switching the active editor tab away from the graph and back resets all graph view state to defaults; the graph re-seeds, re-runs layout, and loses expansion, selection, pan, and zoom."
+environment = "IntelliJ plugin graph editor in /Users/lburzak/dev/creye on branch hello at commit 5b17786."
+encountered-in-commit = "5b17786c86f0f873846f71b4a88a182430a9bedb"
+reproduction-steps = [
+  "Open the dependency graph editor and select a branch so the graph renders.",
+  "Expand some nodes, drag/pan/zoom, change a slider.",
+  "Switch to another editor tab (e.g. a source file).",
+  "Switch back to the dependency graph tab.",
+  "Observe all view state has reset to defaults.",
+]
+
+[[hypothesis]]
+clues = [
+  "All graph view state lives in `remember`/`remember(graph)` inside Composables: pan/zoom/canvasSize in GraphCanvas.kt (DependencyGraphView.kt:63-108).",
+  "GraphPanelController is a project-level @Service singleton — its StateFlow (graph + phase) survives, but per-render view state does not.",
+  "JewelComposePanel/ComposePanel ties composition lifetime to Swing displayability; switching tabs removes the inactive editor component (removeNotify), disposing the composition and discarding all remember state.",
+  "DependencyGraphFileEditor (DependencyGraphFileEditor.kt) holds no view state and implements setState as no-op, so nothing is persisted across composition recreation.",
+]
+validation-steps = [
+  "Confirm composition disposes on tab switch (log in a DisposableEffect onDispose in the JewelComposePanel content).",
+  "Confirm state survives once hoisted out of the composition into a lifetime that outlives the panel (controller/file-scoped holder).",
+]
+probability = 5
