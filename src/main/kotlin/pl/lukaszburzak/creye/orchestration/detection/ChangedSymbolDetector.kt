@@ -18,6 +18,7 @@ import pl.lukaszburzak.creye.domain.change.ContextualDeclaration
 import pl.lukaszburzak.creye.domain.change.FileChangeState
 import pl.lukaszburzak.creye.domain.change.FileMove
 import pl.lukaszburzak.creye.domain.change.Hunk
+import pl.lukaszburzak.creye.domain.change.SourceRange
 import pl.lukaszburzak.creye.domain.diagnostics.Diagnostic
 import pl.lukaszburzak.creye.domain.diagnostics.DiagnosticSource
 import pl.lukaszburzak.creye.domain.diagnostics.Severity
@@ -78,10 +79,10 @@ class ChangedSymbolDetector(
     ) {
         when (val result = parse(file, content, diagnostics)) {
             is ParseResult.Parsed -> result.tree.allNodes().forEach { node ->
-                changed[node.path] = ChangedDeclaration(node.path, kind, file.path, node.displayName)
+                changed.merge(node, kind, file.path, sideFor(kind), content.orEmpty())
             }
             is ParseResult.Malformed -> changed[result.filePath] =
-                ChangedDeclaration(result.filePath, kind, file.path, result.fileName)
+                wholeFileDeclaration(result.filePath, kind, file.path, result.fileName, content.orEmpty())
             ParseResult.NoContent -> Unit
         }
     }
@@ -100,7 +101,16 @@ class ChangedSymbolDetector(
                 ?: (baselineResult as? ParseResult.Malformed)
                 ?: return
             changed[fallback.filePath] =
-                ChangedDeclaration(fallback.filePath, ChangeKind.MODIFIED, file.path, fallback.fileName)
+                ChangedDeclaration(
+                    fallback.filePath,
+                    ChangeKind.MODIFIED,
+                    file.path,
+                    fallback.fileName,
+                    currentRange = file.currentContent?.let { sourceRange(it, 0 until it.length) },
+                    baselineRange = file.baselineContent?.let { sourceRange(it, 0 until it.length) },
+                    currentText = file.currentContent,
+                    baselineText = file.baselineContent,
+                )
             return
         }
         val currentTree = currentResult.tree
@@ -116,6 +126,8 @@ class ChangedSymbolDetector(
             currentOffsets.toOffsets(hunk.current)?.let { span ->
                 mappedAnywhere = mapSide(
                     currentTree, span, file,
+                    side = DiffSide.CURRENT,
+                    content = file.currentContent.orEmpty(),
                     kindFor = { path -> if (path in baselineIds) ChangeKind.MODIFIED else ChangeKind.ADDED },
                     changed, contextual,
                 ) || mappedAnywhere
@@ -124,6 +136,8 @@ class ChangedSymbolDetector(
             baselineOffsets.toOffsets(hunk.baseline)?.let { span ->
                 mappedAnywhere = mapSide(
                     baselineTree, span, file,
+                    side = DiffSide.BASELINE,
+                    content = file.baselineContent.orEmpty(),
                     kindFor = { path -> if (path in currentIds) ChangeKind.MODIFIED else ChangeKind.DELETED },
                     changed, contextual,
                 ) || mappedAnywhere
@@ -146,6 +160,8 @@ class ChangedSymbolDetector(
         tree: DeclTree,
         span: IntRange,
         file: ChangedFile,
+        side: DiffSide,
+        content: String,
         kindFor: (NodePath) -> ChangeKind,
         changed: MutableMap<NodePath, ChangedDeclaration>,
         contextual: MutableMap<NodePath, ContextualDeclaration>,
@@ -156,11 +172,7 @@ class ChangedSymbolDetector(
             if (OwnRanges.intersects(node.ownRanges, span)) {
                 mapped = true
                 val kind = kindFor(node.path)
-                val existing = changed[node.path]
-                // DELETED/ADDED outrank MODIFIED when both sides report the same node.
-                if (existing == null || existing.kind == ChangeKind.MODIFIED) {
-                    changed[node.path] = ChangedDeclaration(node.path, kind, file.path, node.displayName)
-                }
+                changed.merge(node, kind, file.path, side, content)
             } else {
                 mapped = true
                 contextual.putIfAbsent(node.path, ContextualDeclaration(node.path, file.path))
@@ -189,6 +201,87 @@ class ChangedSymbolDetector(
         }
         return ParseResult.Parsed(DeclTree.build(ktFile, filePath, fileName))
     }
+}
+
+private enum class DiffSide { CURRENT, BASELINE }
+
+private fun sideFor(kind: ChangeKind): DiffSide =
+    if (kind == ChangeKind.DELETED) DiffSide.BASELINE else DiffSide.CURRENT
+
+private fun MutableMap<NodePath, ChangedDeclaration>.merge(
+    node: DeclNode,
+    kind: ChangeKind,
+    filePath: String,
+    side: DiffSide,
+    content: String,
+) {
+    val existing = this[node.path]
+    val range = sourceRange(content, node.fullRange)
+    val text = content.sliceRange(node.fullRange)
+    this[node.path] = ChangedDeclaration(
+        identity = node.path,
+        kind = mergeKind(existing?.kind, kind),
+        filePath = existing?.filePath ?: filePath,
+        displayName = existing?.displayName ?: node.displayName,
+        currentRange = if (side == DiffSide.CURRENT) range else existing?.currentRange,
+        baselineRange = if (side == DiffSide.BASELINE) range else existing?.baselineRange,
+        currentText = if (side == DiffSide.CURRENT) text else existing?.currentText,
+        baselineText = if (side == DiffSide.BASELINE) text else existing?.baselineText,
+    )
+}
+
+private fun wholeFileDeclaration(
+    path: NodePath,
+    kind: ChangeKind,
+    filePath: String,
+    displayName: String,
+    content: String,
+): ChangedDeclaration =
+    ChangedDeclaration(
+        identity = path,
+        kind = kind,
+        filePath = filePath,
+        displayName = displayName,
+        currentRange = if (kind != ChangeKind.DELETED) sourceRange(content, 0 until content.length) else null,
+        baselineRange = if (kind == ChangeKind.DELETED) sourceRange(content, 0 until content.length) else null,
+        currentText = if (kind != ChangeKind.DELETED) content else null,
+        baselineText = if (kind == ChangeKind.DELETED) content else null,
+    )
+
+private fun mergeKind(existing: ChangeKind?, incoming: ChangeKind): ChangeKind =
+    when {
+        existing == null -> incoming
+        existing == incoming -> existing
+        existing == ChangeKind.MODIFIED -> incoming
+        incoming == ChangeKind.MODIFIED -> existing
+        else -> incoming
+    }
+
+private fun sourceRange(content: String, range: IntRange): SourceRange {
+    val start = range.first.coerceIn(0, content.length)
+    val end = (range.last + 1).coerceIn(start, content.length)
+    return SourceRange(
+        startOffset = start,
+        endOffset = end,
+        startLine = lineNumber(content, start),
+        endLine = lineNumber(content, (end - 1).coerceAtLeast(start)),
+    )
+}
+
+private fun String.sliceRange(range: IntRange): String {
+    val start = range.first.coerceIn(0, length)
+    val end = (range.last + 1).coerceIn(start, length)
+    return substring(start, end)
+}
+
+private fun lineNumber(content: String, offset: Int): Int {
+    if (content.isEmpty()) return 1
+    val bounded = offset.coerceIn(0, content.lastIndex)
+    var line = 1
+    for (index in 0 until bounded) {
+        if (content[index] == '\n') line++
+    }
+    return line
 }
 
 private fun MutableList<Diagnostic>.addDistinct(newDiagnostics: List<Diagnostic>) {

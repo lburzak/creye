@@ -12,7 +12,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.withContext
 import pl.lukaszburzak.creye.domain.change.ChangeDetection
-import pl.lukaszburzak.creye.domain.graph.DependencyGraph
+import pl.lukaszburzak.creye.domain.change.GraphAnalysisResult
 import pl.lukaszburzak.creye.orchestration.graph.GraphAssembler
 import pl.lukaszburzak.creye.orchestration.detection.ChangedSymbolDetector
 import pl.lukaszburzak.creye.orchestration.detection.ProjectFileSegments
@@ -33,18 +33,19 @@ class GraphAnalysisService(
      * Launches analysis of the working directory against [branch].
      * Cancel the returned [Deferred] to cancel the analysis.
      */
-    fun analyze(branch: String): Deferred<DependencyGraph> = scope.async {
+    fun analyze(branch: String): Deferred<GraphAnalysisResult> = scope.async {
         val detection = detectChangesNow(branch)
         val rootPath = repositoryRootPath()
         val resolved = readAction {
             DependencyResolver(project, rootPath, ProjectFileSegments(project, rootPath))
                 .resolve(detection)
         }
-        GraphAssembler.assemble(
+        val graph = GraphAssembler.assemble(
             symbols = detection.symbols,
             resolved = resolved,
             upstreamDiagnostics = detection.comparison.diagnostics,
         )
+        GraphAnalysisResult(graph, detection)
     }
 
     /** Launches the ADR-003 + ADR-004 change-detection pipeline against [branch]. */

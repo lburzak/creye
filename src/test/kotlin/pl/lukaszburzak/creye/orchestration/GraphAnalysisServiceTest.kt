@@ -22,7 +22,7 @@ class GraphAnalysisServiceTest : BasePlatformTestCase() {
 
     fun `test analyze on non-git project yields empty graph with git diagnostic`() {
         val service = GraphAnalysisService.getInstance(project)
-        val graph = runBlocking { service.analyze("main").await() }
+        val graph = runBlocking { service.analyze("main").await() }.graph
         assertEmpty(graph.structuralNodes)
         assertEmpty(graph.externalNodes)
         assertEmpty(graph.edges)

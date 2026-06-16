@@ -41,6 +41,7 @@ fun GraphSurface(
     onBranchSelected: (String) -> Unit,
     onRefresh: () -> Unit,
     onShowDiff: (NodePath) -> Unit,
+    onToggleApproval: (NodePath) -> Unit,
     forceSettings: ForceSettings,
     onForceSettingsChange: (ForceSettings) -> Unit,
 ) {
@@ -62,7 +63,10 @@ fun GraphSurface(
             is AnalysisPhase.Ready -> Column(modifier = Modifier.fillMaxSize()) {
                 DependencyGraphView(
                     phase.graph,
+                    changedSymbols = phase.result.detection.symbols,
+                    approvals = phase.approvals,
                     onShowDiff = onShowDiff,
+                    onToggleApproval = onToggleApproval,
                     forceSettings = forceSettings,
                     onForceSettingsChange = onForceSettingsChange,
                     modifier = Modifier.weight(1f),

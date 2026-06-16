@@ -148,6 +148,6 @@ The key words "MUST", "MUST NOT", "SHOULD", "SHOULD NOT", "MAY", and "OPTIONAL" 
 - File approval control MUST be displayed in Combined Diff
 - Approved code blocks MUST be highlighted in Combined Diff
 - A gutter icon MUST indicate approval status for classes/symbols
-  - MUST be green circle, when approved
-  - MUST be red circle when unapproved
+  - MUST be filled green circle, when approved
+  - MUST be unfilled green outline circle, when unapproved
   - MUST toggle approval when clicked

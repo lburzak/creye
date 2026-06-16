@@ -29,6 +29,8 @@ import kotlinx.coroutines.withContext
 import org.jetbrains.jewel.ui.component.CheckboxRow
 import org.jetbrains.jewel.ui.component.OutlinedButton
 import org.jetbrains.jewel.ui.component.Text
+import pl.lukaszburzak.creye.domain.approval.ApprovalState
+import pl.lukaszburzak.creye.domain.change.ChangedSymbols
 import pl.lukaszburzak.creye.domain.diagnostics.DiagnosticAttachment
 import pl.lukaszburzak.creye.domain.graph.DependencyGraph
 import pl.lukaszburzak.creye.domain.graph.GraphNodeId
@@ -57,7 +59,10 @@ private val controlFillColor = Color(0xFF42A5F5)
 @Composable
 fun DependencyGraphView(
     graph: DependencyGraph,
+    changedSymbols: ChangedSymbols,
+    approvals: ApprovalState,
     onShowDiff: (NodePath) -> Unit = {},
+    onToggleApproval: (NodePath) -> Unit = {},
     forceSettings: ForceSettings = ForceSettings.DEFAULT,
     onForceSettingsChange: (ForceSettings) -> Unit = {},
     modifier: Modifier = Modifier,
@@ -112,7 +117,9 @@ fun DependencyGraphView(
     // Persist any slider change so a readable layout survives sessions and rebuilds.
     fun persistForces() = onForceSettingsChange(ForceSettings(centerGravity, nodeAttraction, nodeRepulsion))
 
-    val visible = remember(graph, expanded, showExternal) { projectVisibleGraph(graph, expanded, showExternal) }
+    val visible = remember(graph, expanded, showExternal, changedSymbols, approvals) {
+        projectVisibleGraph(graph, expanded, showExternal, changedSymbols, approvals)
+    }
     val simulationConfig = remember(centerGravity, nodeAttraction, nodeRepulsion) {
         LivingGraphSimulationConfig(
             nodeRepulsion = nodeRepulsion,
@@ -231,6 +238,7 @@ fun DependencyGraphView(
             diagnosticNodes = diagnosticNodes,
             onSelect = { selected = it },
             onShowDiff = { id -> onShowDiff(id.path) },
+            onToggleApproval = { id -> onToggleApproval(id.path) },
             onExpand = { id -> updateExpanded(expanded + id.path) },
             onCollapseSelfAndSiblings = { id -> updateExpanded(collapseSelfAndSiblings(expanded, id.path)) },
             onUndo = ::undo,

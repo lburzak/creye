@@ -1,12 +1,19 @@
 package pl.lukaszburzak.creye.rendering
 
+import pl.lukaszburzak.creye.domain.approval.ApprovalState
+import pl.lukaszburzak.creye.domain.change.GraphAnalysisResult
 import pl.lukaszburzak.creye.domain.graph.DependencyGraph
 
 /** Analysis lifecycle as seen by the render surface. */
 sealed interface AnalysisPhase {
     data object Idle : AnalysisPhase
     data object Running : AnalysisPhase
-    data class Ready(val graph: DependencyGraph) : AnalysisPhase
+    data class Ready(
+        val result: GraphAnalysisResult,
+        val approvals: ApprovalState,
+    ) : AnalysisPhase {
+        val graph: DependencyGraph get() = result.graph
+    }
     data class Failed(val message: String) : AnalysisPhase
 }
 

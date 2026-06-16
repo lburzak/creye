@@ -2,9 +2,14 @@ package pl.lukaszburzak.creye.rendering.projection
 
 import junit.framework.TestCase.assertEquals
 import junit.framework.TestCase.assertFalse
+import junit.framework.TestCase.assertNull
 import junit.framework.TestCase.assertTrue
 import org.junit.Test
+import pl.lukaszburzak.creye.domain.approval.ApprovalCompleteness
+import pl.lukaszburzak.creye.domain.approval.ApprovalState
 import pl.lukaszburzak.creye.domain.change.ChangeKind
+import pl.lukaszburzak.creye.domain.change.ChangedDeclaration
+import pl.lukaszburzak.creye.domain.change.ChangedSymbols
 import pl.lukaszburzak.creye.domain.graph.DependencyClassification
 import pl.lukaszburzak.creye.domain.graph.DependencyEdge
 import pl.lukaszburzak.creye.domain.graph.DependencyGraph
@@ -222,4 +227,99 @@ class VisibleGraphProjectionTest {
 
         assertEquals(ChangeKind.MODIFIED, visible.structuralNodes.single { it.node.path == symbolA }.node.change)
     }
+
+    @Test
+    fun `approval projection marks a changed leaf as full when approved`() {
+        val symbols = changedSymbols(symbolA)
+        val approvals = ApprovalState().toggle(symbolA, symbols)
+        val graph = graphWithChanged(symbolA)
+
+        val visible = projectVisibleGraph(
+            graph,
+            expanded = setOf(moduleA, packageA, fileA),
+            changedSymbols = symbols,
+            approvals = approvals,
+        )
+
+        val node = visible.structuralNodes.single { it.node.path == symbolA }
+        assertEquals(ApprovalMarker.LEAF, node.approvalMarker)
+        assertEquals(ApprovalCompleteness.FULL, node.approval?.completeness)
+    }
+
+    @Test
+    fun `approval projection marks containers as full partial or none`() {
+        val symbols = changedSymbols(symbolA, symbolA2)
+        val graph = graphWithChanged(symbolA, symbolA2)
+
+        val none = projectVisibleGraph(graph, expanded = emptySet(), changedSymbols = symbols, approvals = ApprovalState())
+            .structuralNodes.single { it.node.path == moduleA }
+        assertEquals(ApprovalMarker.CONTAINER, none.approvalMarker)
+        assertEquals(ApprovalCompleteness.NONE, none.approval?.completeness)
+
+        val partialApprovals = ApprovalState().toggle(symbolA, symbols)
+        val partial = projectVisibleGraph(graph, expanded = emptySet(), changedSymbols = symbols, approvals = partialApprovals)
+            .structuralNodes.single { it.node.path == moduleA }
+        assertEquals(ApprovalCompleteness.PARTIAL, partial.approval?.completeness)
+
+        val fullApprovals = partialApprovals.toggle(moduleA, symbols)
+        val full = projectVisibleGraph(graph, expanded = emptySet(), changedSymbols = symbols, approvals = fullApprovals)
+            .structuralNodes.single { it.node.path == moduleA }
+        assertEquals(ApprovalCompleteness.FULL, full.approval?.completeness)
+    }
+
+    @Test
+    fun `approval projection leaves containers with no changed leaves unmarked`() {
+        val graph = DependencyGraph(structuralNodes = nodes(moduleA, packageA), edges = emptyList())
+
+        val visible = projectVisibleGraph(graph, expanded = emptySet(), changedSymbols = changedSymbols(), approvals = ApprovalState())
+
+        val node = visible.structuralNodes.single { it.node.path == moduleA }
+        assertNull(node.approval)
+        assertNull(node.approvalMarker)
+    }
+
+    @Test
+    fun `approval projection never marks external nodes`() {
+        val toExternal = edge(symbolA, GraphNodeId.External(external), DependencyClassification.EXTERNAL)
+        val symbols = changedSymbols(symbolA)
+        val graph = graphWithChanged(symbolA).copy(
+            externalNodes = listOf(ExternalNode(external)),
+            edges = listOf(toExternal),
+        )
+
+        val visible = projectVisibleGraph(graph, expanded = emptySet(), changedSymbols = symbols, approvals = ApprovalState())
+
+        assertEquals(listOf(ExternalNode(external)), visible.externalNodes)
+        assertTrue(visible.structuralNodes.none { it.node.displayName == external.displayName })
+    }
+
+    private fun graphWithChanged(vararg changed: NodePath): DependencyGraph {
+        val paths = changed.flatMap { ancestorsAndSelf(it) }.distinct()
+        return DependencyGraph(
+            structuralNodes = paths.map { path ->
+                StructuralNode(path, path.displayName(), change = if (path in changed) ChangeKind.MODIFIED else null)
+            },
+            edges = emptyList(),
+        )
+    }
+
+    private fun changedSymbols(vararg paths: NodePath) =
+        ChangedSymbols(
+            changed = paths.map { path ->
+                ChangedDeclaration(
+                    identity = path,
+                    kind = ChangeKind.MODIFIED,
+                    filePath = path.filePath(),
+                    displayName = path.displayName(),
+                    currentText = "${path.displayName()} after",
+                    baselineText = "${path.displayName()} before",
+                )
+            },
+            contextual = emptyList(),
+            movedFiles = emptyList(),
+            diagnostics = emptyList(),
+        )
+
+    private fun NodePath.filePath(): String =
+        segments.filterIsInstance<NodeSegment.File>().firstOrNull()?.moduleRelativePath ?: "unknown.kt"
 }

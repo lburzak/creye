@@ -49,6 +49,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import org.jetbrains.jewel.ui.component.Text
+import pl.lukaszburzak.creye.domain.approval.ApprovalCompleteness
 import pl.lukaszburzak.creye.domain.change.ChangeKind
 import pl.lukaszburzak.creye.domain.graph.DependencyClassification
 import pl.lukaszburzak.creye.domain.identity.NodePath
@@ -60,6 +61,8 @@ import pl.lukaszburzak.creye.rendering.layout.LayoutPoint
 import pl.lukaszburzak.creye.rendering.layout.LayoutRect
 import pl.lukaszburzak.creye.rendering.projection.VisibleEdge
 import pl.lukaszburzak.creye.rendering.projection.VisibleGraph
+import pl.lukaszburzak.creye.rendering.projection.VisibleNode
+import pl.lukaszburzak.creye.rendering.projection.ApprovalMarker
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.hypot
@@ -81,6 +84,7 @@ private object Palette {
     val hierarchyEdge = Color(0xFFB0BEC5)
     val badgeFill = Color(0xFF455A64)
     val diagnosticMarker = Color(0xFFFFC107)
+    val approval = Color(0xFF2E7D32)
     val label = Color(0xFFECEFF1)
     val labelShadow = Color(0xCC263238)
     val collapsedRing = Color(0xFFECEFF1)
@@ -105,6 +109,7 @@ fun GraphCanvas(
     diagnosticNodes: Set<GraphNodeId>,
     onSelect: (GraphNodeId?) -> Unit,
     onShowDiff: (GraphNodeId.Structural) -> Unit,
+    onToggleApproval: (GraphNodeId.Structural) -> Unit,
     onExpand: (GraphNodeId.Structural) -> Unit,
     onCollapseSelfAndSiblings: (GraphNodeId.Structural) -> Unit,
     onNodeDragStart: (GraphNodeId) -> Unit,
@@ -146,6 +151,7 @@ fun GraphCanvas(
     val currentLayout by rememberUpdatedState(layout)
     val currentOnSelect by rememberUpdatedState(onSelect)
     val currentOnShowDiff by rememberUpdatedState(onShowDiff)
+    val currentOnToggleApproval by rememberUpdatedState(onToggleApproval)
     val currentOnExpand by rememberUpdatedState(onExpand)
     val currentOnCollapseSelfAndSiblings by rememberUpdatedState(onCollapseSelfAndSiblings)
     val currentOnNodeDragStart by rememberUpdatedState(onNodeDragStart)
@@ -196,7 +202,11 @@ fun GraphCanvas(
     }
 
     fun nodeMenuEntries(id: GraphNodeId.Structural): List<MenuEntry> = buildList {
+        val visibleNode = currentVisible.structuralNodes.firstOrNull { it.node.path == id.path }
         add(MenuEntry.Item("Show diff with descendants") { currentOnShowDiff(id) })
+        visibleNode?.approval?.let { approval ->
+            add(MenuEntry.Item(if (approval.isFullyApproved) "Approved ✓" else "Approved") { currentOnToggleApproval(id) })
+        }
         add(MenuEntry.Separator)
         val beforeGoTo = size
         id.path.nearestAncestorOfType<NodeSegment.Class>()?.let {
@@ -209,7 +219,6 @@ fun GraphCanvas(
             add(MenuEntry.Item("Go to nearest module") { goTo(GraphNodeId.Structural(it)) })
         }
         if (size > beforeGoTo) add(MenuEntry.Separator)
-        val visibleNode = currentVisible.structuralNodes.firstOrNull { it.node.path == id.path }
         if (visibleNode?.isCollapsed == true) {
             add(MenuEntry.Item("Expand") { currentOnExpand(id) })
         }
@@ -503,6 +512,7 @@ private fun DrawScope.drawNodes(
         if (visibleNode.internalizedEdges.isNotEmpty()) {
             drawBadge(textMeasurer, rect, visibleNode.internalizedEdges.size)
         }
+        drawApprovalMarker(visibleNode, rect)
         if (id in diagnosticNodes) {
             drawCircle(Palette.diagnosticMarker, radius = 4f, center = Offset(center.x - 10f, center.y - 10f))
         }
@@ -621,6 +631,36 @@ private fun DrawScope.drawBadge(textMeasurer: TextMeasurer, rect: LayoutRect, co
     drawCircle(Palette.label, radius = 9f, center = center, style = Stroke(width = 1f))
     val measured = textMeasurer.measure(count.toString(), TextStyle(fontSize = 9.sp))
     drawText(measured, Palette.label, Offset(center.x - measured.size.width / 2, center.y - measured.size.height / 2))
+}
+
+private fun DrawScope.drawApprovalMarker(visibleNode: VisibleNode, rect: LayoutRect) {
+    val approval = visibleNode.approval ?: return
+    val marker = visibleNode.approvalMarker ?: return
+    val nodeCenter = rect.center.toOffset()
+    val center = Offset(nodeCenter.x + 13f, nodeCenter.y + 13f)
+    val radius = 6f
+    when (marker) {
+        ApprovalMarker.LEAF -> {
+            if (approval.completeness == ApprovalCompleteness.FULL) {
+                drawCircle(Palette.approval, radius = radius, center = center)
+            }
+            drawCircle(Palette.approval, radius = radius, center = center, style = Stroke(width = 1.5f))
+        }
+        ApprovalMarker.CONTAINER -> {
+            val fraction = approval.approvedLeaves.toFloat() / approval.totalLeaves.toFloat()
+            if (fraction > 0f) {
+                drawArc(
+                    color = Palette.approval,
+                    startAngle = -90f,
+                    sweepAngle = 360f * fraction,
+                    useCenter = true,
+                    topLeft = Offset(center.x - radius, center.y - radius),
+                    size = Size(radius * 2f, radius * 2f),
+                )
+            }
+            drawCircle(Palette.approval, radius = radius, center = center, style = Stroke(width = 1.5f))
+        }
+    }
 }
 
 private fun LayoutPoint.toOffset(): Offset = Offset(x, y)

@@ -25,6 +25,9 @@ import com.intellij.openapi.actionSystem.ActionPlaces
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
+import pl.lukaszburzak.creye.domain.approval.ApprovalState
+import pl.lukaszburzak.creye.domain.change.ChangedDeclaration
+import pl.lukaszburzak.creye.domain.change.ChangedSymbols
 import java.awt.BorderLayout
 import javax.swing.JComponent
 import javax.swing.JPanel
@@ -84,7 +87,15 @@ class NodeDiffPresenter(private val project: Project) {
     }
 
     /** An embeddable combined-diff view paired with the disposable that releases its diff processor. */
-    class Panel(val component: JComponent, val disposable: Disposable)
+    class Panel(
+        val component: JComponent,
+        val disposable: Disposable,
+        private val updateApprovals: (ApprovalState) -> Unit,
+    ) {
+        fun updateApprovals(approvals: ApprovalState) {
+            updateApprovals.invoke(approvals)
+        }
+    }
 
     /**
      * EDT: builds a combined-diff component showing every change at once, stacked vertically,
@@ -92,7 +103,14 @@ class NodeDiffPresenter(private val project: Project) {
      * the caller mounts [Panel.component] beside the graph and disposes [Panel.disposable] when
      * the view is replaced or the editor closes.
      */
-    fun createPanel(changes: List<Change>, title: String, onClose: () -> Unit): Panel? {
+    fun createPanel(
+        changes: List<Change>,
+        title: String,
+        symbols: ChangedSymbols,
+        approvals: ApprovalState,
+        onToggleApproval: (NodePath) -> Unit,
+        onClose: () -> Unit,
+    ): Panel? {
         val processor = CombinedDiffManager.getInstance(project).createProcessor()
         val blocks = changes.mapNotNull { change ->
             val producer = ChangeDiffRequestProducer.create(project, change) ?: return@mapNotNull null
@@ -103,15 +121,26 @@ class NodeDiffPresenter(private val project: Project) {
             Disposer.dispose(processor.disposable)
             return null
         }
+        val fileTargets = fileApprovalTargets(changes, symbols)
+        val decorationHandle = CombinedDiffApprovalDecorator.install(
+            processor = processor,
+            decorations = approvalDecorations(symbols, approvals, fileTargets.map { it.first }),
+            onToggleApproval = onToggleApproval,
+        )
         processor.setBlocks(blocks)
 
         val container = JPanel(BorderLayout())
         container.add(buildHeader(title, onClose), BorderLayout.NORTH)
         container.add(processor.component, BorderLayout.CENTER)
-        return Panel(container, processor.disposable)
+        return Panel(container, processor.disposable) { nextApprovals ->
+            decorationHandle?.update(approvalDecorations(symbols, nextApprovals, fileTargets.map { it.first }))
+        }
     }
 
-    private fun buildHeader(title: String, onClose: () -> Unit): JComponent {
+    private fun buildHeader(
+        title: String,
+        onClose: () -> Unit,
+    ): JComponent {
         val header = JPanel(BorderLayout())
         header.border = JBUI.Borders.empty(4, 8)
         header.add(JBLabel(title), BorderLayout.WEST)
@@ -120,10 +149,93 @@ class NodeDiffPresenter(private val project: Project) {
             override fun actionPerformed(e: AnActionEvent) = onClose()
             override fun getActionUpdateThread() = ActionUpdateThread.EDT
         }
+        val group = DefaultActionGroup()
+        group.add(closeAction)
         val toolbar = ActionManager.getInstance()
-            .createActionToolbar(ActionPlaces.UNKNOWN, DefaultActionGroup(closeAction), true)
+            .createActionToolbar(ActionPlaces.UNKNOWN, group, true)
         toolbar.targetComponent = header
         header.add(toolbar.component, BorderLayout.EAST)
         return header
     }
+
+    companion object {
+        fun approvalDecorations(
+            symbols: ChangedSymbols,
+            approvals: ApprovalState,
+            fileTargets: List<NodePath> = emptyList(),
+        ): List<ApprovalDiffDecoration> =
+            buildList {
+                fileTargets.forEach { target ->
+                    val filePath = target.fileSegment()?.moduleRelativePath ?: return@forEach
+                    add(
+                        ApprovalDiffDecoration.Gutter(
+                            target = target,
+                            filePath = filePath,
+                            line = 1,
+                            approved = approvals.summary(target, symbols)?.isFullyApproved == true,
+                        ),
+                    )
+                }
+                symbols.changed.forEach { declaration ->
+                    val approved = approvals.isApproved(declaration)
+                    declaration.currentRange?.let { range ->
+                        add(
+                            ApprovalDiffDecoration.Gutter(
+                                target = declaration.identity,
+                                filePath = declaration.filePath,
+                                line = range.startLine,
+                                approved = approved,
+                            ),
+                        )
+                        if (approved) {
+                            add(
+                                ApprovalDiffDecoration.Highlight(
+                                    target = declaration.identity,
+                                    filePath = declaration.filePath,
+                                    startLine = range.startLine,
+                                    endLine = range.endLine,
+                                ),
+                            )
+                        }
+                    }
+                }
+            }
+    }
+}
+
+sealed interface ApprovalDiffDecoration {
+    val target: NodePath
+    val filePath: String
+
+    data class Gutter(
+        override val target: NodePath,
+        override val filePath: String,
+        val line: Int,
+        val approved: Boolean,
+    ) : ApprovalDiffDecoration
+
+    data class Highlight(
+        override val target: NodePath,
+        override val filePath: String,
+        val startLine: Int,
+        val endLine: Int,
+    ) : ApprovalDiffDecoration
+}
+
+private fun fileApprovalTargets(changes: List<Change>, symbols: ChangedSymbols): List<Pair<NodePath, String>> {
+    val changedFilePaths = changes.mapTo(linkedSetOf()) { ChangesUtil.getFilePath(it).path }
+    return symbols.changed
+        .asSequence()
+        .filter { declaration ->
+            changedFilePaths.any { path -> path == declaration.filePath || path.endsWith("/${declaration.filePath}") }
+        }
+        .mapNotNull { declaration -> declaration.fileNode()?.let { it to declaration.filePath.substringAfterLast('/') } }
+        .distinct()
+        .toList()
+}
+
+private fun ChangedDeclaration.fileNode(): NodePath? {
+    val index = identity.segments.indexOfFirst { it is pl.lukaszburzak.creye.domain.identity.NodeSegment.File }
+    if (index < 0) return null
+    return NodePath(identity.segments.subList(0, index + 1))
 }

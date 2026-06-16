@@ -16,7 +16,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import pl.lukaszburzak.creye.domain.graph.DependencyGraph
+import pl.lukaszburzak.creye.domain.approval.ApprovalState
+import pl.lukaszburzak.creye.domain.change.ChangedSymbols
+import pl.lukaszburzak.creye.domain.change.GraphAnalysisResult
 import pl.lukaszburzak.creye.domain.identity.NodePath
 import pl.lukaszburzak.creye.orchestration.GraphAnalysisService
 import pl.lukaszburzak.creye.rendering.AnalysisPhase
@@ -41,12 +43,17 @@ class GraphPanelController(
      * when no diff is shown. The editor observes this and builds/disposes the view; carries the
      * git [Change] list so the rendering layer stays git-free (ADR-011).
      */
-    data class DiffRequest(val changes: List<Change>, val title: String)
+    data class DiffRequest(
+        val changes: List<Change>,
+        val title: String,
+        val symbols: ChangedSymbols,
+        val approvals: ApprovalState,
+    )
 
     private val _diffRequest = MutableStateFlow<DiffRequest?>(null)
     val diffRequest: StateFlow<DiffRequest?> = _diffRequest.asStateFlow()
 
-    private var analysis: Deferred<DependencyGraph>? = null
+    private var analysis: Deferred<GraphAnalysisResult>? = null
     private val diffPresenter = NodeDiffPresenter(project)
 
     /** Restores ADR-011 state when the panel opens: branch list, persisted selection. */
@@ -91,14 +98,17 @@ class GraphPanelController(
 
     /** Opens the IDE diff for a clicked node and its descendants against the selected branch. */
     fun showNodeDiff(node: NodePath) {
-        val graph = (_state.value.phase as? AnalysisPhase.Ready)?.graph ?: return
+        val ready = _state.value.phase as? AnalysisPhase.Ready ?: return
         val branch = _state.value.selectedBranch ?: return
         scope.launch {
-            val result = withContext(Dispatchers.Default) { diffPresenter.resolve(node, graph, branch) }
+            val result = withContext(Dispatchers.Default) { diffPresenter.resolve(node, ready.graph, branch) }
             withContext(Dispatchers.EDT) {
                 when (result) {
                     is NodeDiffPresenter.Result.Ready -> _diffRequest.value = DiffRequest(
-                        result.changes, "Diff vs '$branch' (${result.changes.size} files)",
+                        result.changes,
+                        "Diff vs '$branch' (${result.changes.size} files)",
+                        ready.result.detection.symbols,
+                        ready.approvals,
                     )
                     is NodeDiffPresenter.Result.Empty -> Messages.showInfoMessage(
                         project, "No changes in the selected node against '${result.branch}'.", "Show Diff",
@@ -109,6 +119,20 @@ class GraphPanelController(
                 }
             }
         }
+    }
+
+    fun toggleApproval(node: NodePath) {
+        val ready = _state.value.phase as? AnalysisPhase.Ready ?: return
+        val approvals = ApprovalPersistence.getInstance(project).toggle(node, ready.result.detection.symbols)
+        _state.update { state ->
+            val phase = state.phase
+            if (phase is AnalysisPhase.Ready && phase.result === ready.result) {
+                state.copy(phase = phase.copy(approvals = approvals))
+            } else {
+                state
+            }
+        }
+        _diffRequest.update { request -> request?.copy(approvals = approvals) }
     }
 
     /** Hides the combined diff view, e.g. from its close button. */
@@ -125,7 +149,9 @@ class GraphPanelController(
         _state.update { it.copy(phase = AnalysisPhase.Running) }
         scope.launch {
             val phase = try {
-                AnalysisPhase.Ready(deferred.await())
+                val result = deferred.await()
+                val approvals = ApprovalPersistence.getInstance(project).pruneTo(result.detection.symbols)
+                AnalysisPhase.Ready(result, approvals)
             } catch (e: CancellationException) {
                 return@launch // superseded by a newer run or disposal; keep the newer phase
             } catch (e: Exception) {

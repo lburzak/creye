@@ -70,6 +70,10 @@ class ChangedSymbolDetectorTest : BasePlatformTestCase() {
         )
         val grow = result.changedNamed("grow").single()
         assertEquals(ChangeKind.MODIFIED, grow.kind)
+        assertNotNull(grow.currentRange)
+        assertNotNull(grow.baselineRange)
+        assertTrue(grow.currentText!!.contains("return 42"))
+        assertTrue(grow.baselineText!!.contains("return 1"))
         // Both the containing class and the file root contain the change without
         // own-range intersection, so both are contextual (ADR-004 constraint 4).
         assertEquals(
@@ -112,6 +116,9 @@ class ChangedSymbolDetectorTest : BasePlatformTestCase() {
         )
         val shrink = result.changedNamed("shrink").single()
         assertEquals(ChangeKind.DELETED, shrink.kind)
+        assertNull(shrink.currentRange)
+        assertNotNull(shrink.baselineRange)
+        assertTrue(shrink.baselineText!!.contains("fun shrink"))
         assertEmpty(result.changedNamed("grow"))
     }
 
@@ -167,7 +174,11 @@ class ChangedSymbolDetectorTest : BasePlatformTestCase() {
         val result = detect(
             modified("src/Box.kt", baselineBox, current, Hunk(LineRange(8, 0), LineRange(9, 2))),
         )
-        assertEquals(ChangeKind.ADDED, result.changedNamed("stretch").single().kind)
+        val stretch = result.changedNamed("stretch").single()
+        assertEquals(ChangeKind.ADDED, stretch.kind)
+        assertNotNull(stretch.currentRange)
+        assertNull(stretch.baselineRange)
+        assertTrue(stretch.currentText!!.contains("fun stretch"))
     }
 
     fun `test non-kotlin files are ignored`() {

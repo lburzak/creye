@@ -43,6 +43,7 @@ class DependencyGraphFileEditor(
             onBranchSelected = controller::selectBranch,
             onRefresh = controller::refresh,
             onShowDiff = controller::showNodeDiff,
+            onToggleApproval = controller::toggleApproval,
             forceSettings = controller.forceSettings(),
             onForceSettingsChange = controller::updateForceSettings,
         )
@@ -50,6 +51,8 @@ class DependencyGraphFileEditor(
 
     /** Holds the live diff view's disposable so it is released before a replacement mounts. */
     private var diffDisposable: com.intellij.openapi.Disposable? = null
+    private var diffPanel: NodeDiffPresenter.Panel? = null
+    private var diffRequest: GraphPanelController.DiffRequest? = null
 
     private val splitter = OnePixelSplitter(false, 0.6f).apply {
         firstComponent = graphPanel
@@ -58,13 +61,28 @@ class DependencyGraphFileEditor(
     init {
         editorScope.launch {
             controller.diffRequest.collectLatest { request ->
-                disposeDiff()
-                splitter.secondComponent = when (request) {
-                    null -> null
-                    else -> diffPresenter.createPanel(request.changes, request.title, controller::closeDiff)
-                        ?.also { diffDisposable = it.disposable }
-                        ?.component
+                val currentRequest = diffRequest
+                if (request != null && currentRequest != null && diffPanel != null && currentRequest.isSameDiffViewAs(request)) {
+                    diffPanel?.updateApprovals(request.approvals)
+                    diffRequest = request
+                    return@collectLatest
                 }
+
+                disposeDiff()
+                diffRequest = request
+                diffPanel = when (request) {
+                    null -> null
+                    else -> diffPresenter.createPanel(
+                        request.changes,
+                        request.title,
+                        request.symbols,
+                        request.approvals,
+                        controller::toggleApproval,
+                        controller::closeDiff,
+                    )
+                }
+                diffDisposable = diffPanel?.disposable
+                splitter.secondComponent = diffPanel?.component
             }
         }
     }
@@ -72,6 +90,8 @@ class DependencyGraphFileEditor(
     private fun disposeDiff() {
         diffDisposable?.let { Disposer.dispose(it) }
         diffDisposable = null
+        diffPanel = null
+        diffRequest = null
     }
 
     override fun getComponent(): JComponent = splitter
@@ -88,3 +108,8 @@ class DependencyGraphFileEditor(
         editorScope.cancel()
     }
 }
+
+internal fun GraphPanelController.DiffRequest.isSameDiffViewAs(other: GraphPanelController.DiffRequest): Boolean =
+    title == other.title &&
+        changes === other.changes &&
+        symbols === other.symbols

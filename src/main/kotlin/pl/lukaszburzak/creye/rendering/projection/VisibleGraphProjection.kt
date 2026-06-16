@@ -1,5 +1,8 @@
 package pl.lukaszburzak.creye.rendering.projection
 
+import pl.lukaszburzak.creye.domain.approval.ApprovalState
+import pl.lukaszburzak.creye.domain.approval.ApprovalSummary
+import pl.lukaszburzak.creye.domain.change.ChangedSymbols
 import pl.lukaszburzak.creye.domain.graph.DependencyClassification
 import pl.lukaszburzak.creye.domain.graph.DependencyEdge
 import pl.lukaszburzak.creye.domain.graph.DependencyGraph
@@ -18,7 +21,14 @@ data class VisibleNode(
     val isCollapsed: Boolean,
     val internalizedEdges: Set<DependencyEdge>,
     val hasDescendantChange: Boolean,
+    val approval: ApprovalSummary? = null,
+    val approvalMarker: ApprovalMarker? = null,
 )
+
+enum class ApprovalMarker {
+    LEAF,
+    CONTAINER,
+}
 
 /**
  * Aggregated visible edge (ADR-008): deduplicated by `(source, target)` so opposing
@@ -58,6 +68,8 @@ fun projectVisibleGraph(
     graph: DependencyGraph,
     expanded: Set<NodePath>,
     showExternal: Boolean = true,
+    changedSymbols: ChangedSymbols? = null,
+    approvals: ApprovalState = ApprovalState(),
 ): VisibleGraph {
     val structuralPaths = graph.structuralNodes.mapTo(linkedSetOf()) { it.path }
     val childrenByParent = structuralPaths.groupBy { it.parent() }
@@ -99,13 +111,19 @@ fun projectVisibleGraph(
     val structuralNodes = graph.structuralNodes
         .filter { it.path in visiblePaths }
         .map { node ->
+            val approval = changedSymbols?.let { approvals.summary(node.path, it) }
+            val hasChangedDescendant = allChangedPaths.any { changed ->
+                changed.segments.size > node.path.segments.size &&
+                    changed.segments.take(node.path.segments.size) == node.path.segments
+            }
             VisibleNode(
                 node = node,
                 isCollapsed = node.path !in expanded && childrenByParent[node.path].orEmpty().isNotEmpty(),
                 internalizedEdges = internalized[node.path].orEmpty(),
-                hasDescendantChange = allChangedPaths.any { changed ->
-                    changed.segments.size > node.path.segments.size &&
-                        changed.segments.take(node.path.segments.size) == node.path.segments
+                hasDescendantChange = hasChangedDescendant,
+                approval = approval,
+                approvalMarker = approval?.let {
+                    if (hasChangedDescendant) ApprovalMarker.CONTAINER else ApprovalMarker.LEAF
                 },
             )
         }
