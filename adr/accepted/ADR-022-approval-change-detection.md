@@ -1,0 +1,35 @@
+# ADR-022 Approval Change Detection
+
+## Problem & Context
+- REQUIREMENTS requires a node's approval to be invalidated when that node's diffed content changes, and retained when it does not. ADR-018 binds each approval entry to a "content fingerprint" but leaves the fingerprint's definition explicitly open.
+- The fingerprint's definition is the whole behavior: it decides what counts as a change, how whitespace and formatting are treated, and what "the node's content" even means for a leaf declaration.
+- The inputs already exist from analysis: ADR-004 changed-symbol detection and changed ranges, ADR-016's changed-symbol PSI ranges, and the diffed content of each block. Change detection should be a function over those, not a new analysis pass.
+- The fingerprint must be cheap and deterministic enough to recompute on every run and compare against the persisted value, consistent with the ADR-005 segment-value key being PSI-text-derived and stable for unchanged code.
+
+## Constraints
+1. The fingerprint MUST be derived only from data analysis already produces (ADR-004 ranges, ADR-016 ranges, diffed content); it MUST NOT trigger a separate semantic resolution pass.
+2. The fingerprint MUST be deterministic within and across runs for unchanged node content, so an unchanged node compares equal across runs.
+3. A change to the node's diffed content MUST yield a different fingerprint; an unchanged node's content MUST yield the same fingerprint.
+4. Fingerprint computation and comparison MUST happen at materialization time and MUST gate retention of the ADR-018 entry: an entry is kept iff its node key (ADR-005) and fingerprint both match.
+5. This record governs leaf (own-content) nodes, which are the only nodes that carry entries (ADR-018); container validation is derived from these leaf entries by ADR-023, not fingerprinted.
+
+## Decision
+- A leaf node's fingerprint MUST be computed over the **diff the node owns — both sides of the change, before and after** — because approval asserts that the change itself is acceptable, not merely that the resulting code is. For a symbol, this is the changed declaration's source text on both the baseline ("before") and working-dir ("after") sides of its ADR-016 range; for a leaf file node (ADR-017), the changed-line set the diff attributes to that file, which already carries both added and removed lines. A pure deletion is fingerprinted over its before-side content (empty after-side), so removals are approvable.
+- The fingerprint MUST be a hash of that diffed content's verbatim text — before and after — together with the node's ADR-004 change kind, so that a change to either side, or a node flipping between change kinds (e.g. modified vs added), invalidates even if one side's text coincides (constraint 3).
+- For this draft, the content MUST be taken **verbatim with no semantic normalization**: a whitespace-only or formatting-only edit yields a different fingerprint and therefore invalidates approval. Re-review after a reformat is accepted as the conservative default (see Notes for the normalization alternative).
+- Retention MUST be the strict conjunction of two matches: same ADR-005 node-key serialization and same fingerprint. Any mismatch MUST drop the entry; a dropped entry MUST NOT be silently re-created (constraint 4).
+- Change detection MUST consume the ADR-004/ADR-016 ranges and the diff content as given and MUST NOT re-resolve symbols to compute the fingerprint (constraint 1).
+
+## Rationale
+- Hashing the verbatim diff the node owns — both sides — is the most direct reading of "the node's diffed content changed": it is exactly the change the reviewer looked at (the before→after transition), so it cannot drift from what was reviewed. Hashing only the after-side would retain approval when the baseline moves under an unchanged working tree, even though the reviewer is then looking at a different change.
+- Folding the ADR-004 change kind into the hash closes the case where added vs modified content is textually identical but semantically a different review.
+- Choosing verbatim over normalized text for the MVP trades extra re-reviews after reformatting for a definition with zero ambiguity and no formatter model to maintain; normalization can be layered in later without changing the retention contract.
+- Making retention a strict two-way conjunction keeps the rule auditable: an approval survives only when identity and content agree, and either one moving is a defensible reason to ask for re-review.
+- The diff (both sides) is load-bearing under the chosen approval semantic — approval asserts "this change is acceptable," a judgment about the before→after transition, not about the resulting code in isolation. Both the before-side (baseline, ADR-011) and after-side (working dir) are therefore folded into the fingerprint, for symbol and file nodes alike.
+- Because the before-side already encodes the ADR-011 comparison branch, the fingerprint itself is baseline-sensitive: switching the comparison branch changes the before-side, changes the diff, changes the fingerprint, and invalidates the entry even when the working tree is byte-identical. This is correct under diff-approval — a new baseline is a different change to review — and it means node key + diff fingerprint fully determine retention with no separate comparison-scope partition (ADR-021 rejected: the partition is redundant because the baseline is already inside the fingerprint).
+
+## Notes
+- Open for this draft: whether to normalize away insignificant whitespace/formatting (and possibly comments) so cosmetic edits retain approval. This is the main quality lever; deferred because it needs a defined normalization model and risks retaining approval across edits a reviewer would want to see.
+- Open: hash algorithm and collision tolerance — left to implementation, constrained only to be deterministic and stable for identical input. The fingerprint definition (algorithm, both-side input, change-kind folding, and any future normalization) is identified by a **scheme version**; ADR-018 persists this version with the approval state and drops entries minted under a different scheme rather than comparing across schemes. Any change here that alters fingerprint output MUST bump that version.
+- Depends on the ADR-004 downstream-contract extension that retains the **baseline-side range** on the exported changed-declaration record (alongside the current-side range). Without it the before-side content is not reachable at materialization and the two-sided fingerprint is infeasible. The data is already computed in detection (baseline PSI built for deletion detection), so this is a contract surface, not a new resolution pass (constraint 1 holds).
+- There are no container/aggregate fingerprints: ADR-018 stores entries only on leaves, so this leaf fingerprint is the only fingerprint, and ADR-023 derives container validation from leaf entries rather than aggregating fingerprints. Move/rename matching, where the node key changes but content does not, is owned by ADR-024.
