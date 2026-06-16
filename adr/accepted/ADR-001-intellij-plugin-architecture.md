@@ -7,6 +7,7 @@
 - Without explicit boundaries, plugin code can couple IntelliJ action handling to git comparison, Kotlin PSI traversal, dependency analysis, and rendering.
 - The four layers share one Gradle module, so that module needs a concrete platform target and build toolchain before any layer can be built; this record owns that baseline.
 - ADR-006 mandates the K2 Kotlin Analysis API (`analyze { }`), which constrains the minimum viable platform target; an arbitrarily old platform cannot satisfy it.
+
 ## Constraints
 1. The implementation MUST use IntelliJ Platform APIs for plugin actions, project access, background execution, and editor integration where practical.
 2. The implementation MUST keep analysis orchestration separate from UI rendering.

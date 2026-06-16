@@ -2,7 +2,7 @@
 
 ## Problem & Context
 - A reviewer needs to mark parts of the change set as reviewed/approved. Approval is review-progress state laid over the changed-code graph (ADR-007) and the combined diff, not an analysis output. Approval asserts that **the change is acceptable** — a judgment about the before→after transition the reviewer saw, not about the resulting code in isolation; ADR-022 fingerprints both diff sides accordingly.
-- Approval applies to graph nodes at any containment level — module, package, file, class, symbol — so the model must address all ADR-005 structural node kinds, not just files.
+- Approval applies to graph nodes at any containment level — module, package, file, class, symbol — so the model must address all ADR-007 structural node kinds (each carrying ADR-005 identity), not just files.
 - REQUIREMENTS requires approval status to be persisted and restored across sessions, and to be cleared whenever the diff changes.
 - Approving a container (e.g. a module) MUST mean each of its changed descendants is independently approved, so that a later content change invalidates only the descendant that changed, not the whole container approval. This requires per-descendant approval state: a single container entry cannot record what each descendant looked like at approval time, so it cannot invalidate granularly. The cost — approving a container is no longer a single entry, and undoing it is no longer a single removal — is accepted in exchange for granular invalidation.
 - The literal "clear approval whenever the diff changes" is coarse: re-running analysis after an unrelated edit would wipe approvals the reviewer already completed. The intent is to invalidate approvals whose underlying content changed, granularly.

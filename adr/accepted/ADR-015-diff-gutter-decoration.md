@@ -4,12 +4,12 @@
 - The plugin's combined diff needs gutter icons for more than one feature: revealing a file's node in the graph, marking that a line belongs to a changed symbol, and (ADR-019) toggling approval of a class/symbol/file. These are different payloads on the same surface, not separate diff mechanisms.
 - Without a shared facility each feature would re-solve the same hard parts — scoping the decoration to the plugin's own diff, reaching the block editors, correlating a block back to a structural node, placing the icon, de-duplicating, disposing — and would collide in the gutter with no agreed ordering.
 - This record therefore decides the **general gutter-icon facility** for the plugin's combined diff: how any feature contributes a gutter icon and how the facility scopes, correlates, places, stacks, and disposes it. It does not decide what any one icon means — feature records (ADR-019, and any future nav/marker feature) own their own icons, actions, and triggers.
-- The diff lives in the ide / diff-presentation layer (ADR-001); the facility and every contribution MUST stay there and express intent through callbacks, never reaching git, PSI, analysis, or the Compose rendering surface (ADR-011).
+- The diff lives in the ide / diff-presentation layer (ADR-001); the facility and every contribution MUST stay there and express intent through callbacks, never reaching git, PSI, analysis, or the Compose rendering surface (ADR-009).
 
 ## Constraints
 1. Gutter icons MUST appear only in the plugin's own combined diff view; they MUST NOT decorate diffs the plugin did not open.
 2. Each gutter icon MUST be correlated back to the structural node (ADR-005 `NodePath`) and/or change it originates from, and to a line anchor within its block.
-3. Decoration logic MUST live in the ide / diff-presentation layer; it MUST NOT introduce git, PSI, or analysis data into the Compose rendering surface (ADR-011), nor bypass the ADR-001 layering.
+3. Decoration logic MUST live in the ide / diff-presentation layer; it MUST NOT introduce git, PSI, or analysis data into the Compose rendering surface (ADR-009), nor bypass the ADR-001 layering.
 4. Decoration MUST degrade safely: if a diff block exposes no text editor (binary, unsupported viewer), the affordance MUST be skipped rather than failing the view.
 5. The facility MUST accept icon contributions from multiple independent features and render them on the same gutter without features knowing about each other; when more than one icon targets the same line, their order MUST be deterministic.
 6. The facility MUST support both a **block-anchored** icon (a node-level marker at the block's first line) and a **range-anchored** icon (placed at a node's own line within the block); the in-block line anchor MUST be supplied by the contributing feature, because the facility's own block-to-node correlation is file-level only and cannot locate a class/symbol within the block.
@@ -28,7 +28,7 @@
 - Making this a contribution-based facility rather than a fixed decoration set is what lets approval (ADR-019) and any nav/marker feature share one scoped, correlated, disposed mechanism instead of each re-deriving the editor walk and colliding in the gutter; the facility owns the cross-cutting hard parts and the features own only their payload.
 - Correlating by the block's `FilePath` (already the combined-block key) to `NodePath.fileSegment()` reuses identities analysis already mints (ADR-005), avoiding a second source of truth for "which node is this file"; pushing the finer in-block anchor onto the contributor keeps the facility from owning analysis-shaped range data it has no other reason to know.
 - A deterministic contributor-key ordering turns gutter coexistence into a defined rule instead of a race: two features marking the same line always stack the same way, so neither feature's record has to reason about the other's presence.
-- Keeping decoration in the ide layer and expressing click intent through callbacks preserves ADR-001 layering and the ADR-011 git-free rendering surface: the Compose canvas continues to see only `GraphPanelState` and callbacks, never editors or VCS changes.
+- Keeping decoration in the ide layer and expressing click intent through callbacks preserves ADR-001 layering and the ADR-009 git-free rendering surface: the Compose canvas continues to see only `GraphPanelState` and callbacks, never editors or VCS changes.
 - `GutterIconRenderer` on a `RangeHighlighter` is the same primitive the platform uses for breakpoints and bookmarks, so the affordance matches user expectation and inherits gutter hit-testing, tooltips, and click handling instead of hand-built Swing.
 
 ## Notes

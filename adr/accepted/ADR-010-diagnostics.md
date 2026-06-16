@@ -2,13 +2,14 @@
 
 ## Problem & Context
 - The system must provide enough diagnostic information to explain missing or unresolved symbols.
-- Missing dependencies can come from git comparison, project modeling, changed symbol detection, dependency resolution, graph construction, or rendering.
+- Missing dependencies can come from git comparison, project model, changed symbol detection, dependency resolution, graph construction, or rendering.
+
 ## Constraints
 1. The implementation MUST expose diagnostic information for missing or unresolved symbols.
 2. Diagnostics MUST distinguish git, project model, changed symbol detection, dependency resolution, graph construction, and rendering problems.
 
 ## Decision
-- This record owns the diagnostic *type* and the *source taxonomy*. ADR-007 owns diagnostic *attachment* (which graph element a diagnostic hangs on and its identity key). ADR-010 MUST consume the ADR-007 attachment rather than redefine it.
+- This record owns the diagnostic *type* and the *source taxonomy*. ADR-007 owns diagnostic *attachment* (which graph element a diagnostic hangs on and its identity key). This record MUST consume the ADR-007 attachment rather than redefine it.
 - A diagnostic MUST be a value of the shape `{ source, severity, message, location?, attachment? }`, collected into one cross-cutting set spanning all pipeline stages. This set MUST be the single source of truth, projected both onto the graph (ADR-007) and into the panel.
 - `source` MUST be a closed enumeration of six values mapped 1:1 to the producing pipeline-stage ADRs: git (ADR-003), project model (ADR-002), changed symbol detection (ADR-004), dependency resolution (ADR-006), graph construction (ADR-007), and rendering (ADR-009). The enumeration MUST use each stage ADR's own vocabulary; the symbol source MUST be named after ADR-004 "changed symbol detection", not "symbol extraction".
 - Node-identity (ADR-005) failures MUST NOT define a seventh source. They MUST surface under whichever stage encountered them — dependency resolution or graph construction.

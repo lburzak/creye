@@ -18,13 +18,12 @@
   - Expanded node MUST remain visible
   - Children MUST be connected to expanded node via edges
 - MUST collapse itself, and all siblings via the node context menu's Collapse action (see Context Menus)
-- MUST contain an icon, indicating it's type
-- Color MUST indicate it's diff
+- Color MUST indicate its diff
   - Modified -> Blue
   - Added -> Green
   - Deleted -> Red
   - Any descendant changed -> Blue
-- Shape MUST indicate it's type
+- Shape MUST indicate its type
   - Symbol -> Triangle
   - Class/Interface/Enum -> Circle
   - Package -> Square
@@ -46,11 +45,7 @@
 
 # Diff interpretation
 
-- When file is deleted, it's module MUST be resolved to the one it belongs to in comparison target branch
-
-# Living Graph
-
-Create a graph visualization that feels alive: it continuously evaluates physical forces, propagates movement through connected nodes, and allows subtle global drift without losing readability.
+- When file is deleted, its module MUST be resolved to the one it belongs to in comparison target branch
 
 # Requirements
 
@@ -146,8 +141,8 @@ The key words "MUST", "MUST NOT", "SHOULD", "SHOULD NOT", "MAY", and "OPTIONAL" 
 
 ## Approvals
 
-- Node context menu must list "Approved" item with a trailing tick if approved
-- Node representation MUST indicate it's approval status
+- Node context menu MUST list "Approved" item with a trailing tick if approved
+- Node representation MUST indicate its approval status
 - Approval status MUST be persisted
 - A node's approval MUST be invalidated when that node's diffed content changes; approvals for unchanged nodes MUST be retained
 - File approval control MUST be displayed in Combined Diff

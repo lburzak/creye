@@ -10,7 +10,7 @@
 ## Constraints
 1. Range highlighting MUST appear only in the plugin's own combined diff view (ADR-015 constraint 1); it MUST NOT decorate diffs the plugin did not open, nor leak into the real file editor.
 2. Each highlighted range MUST be correlated back to the structural node (ADR-005 `NodePath`) and/or change it originates from.
-3. Highlighting logic MUST live in the ide / diff-presentation layer; it MUST NOT introduce git, PSI, or analysis data into the Compose rendering surface (ADR-011), nor bypass the ADR-001 layering.
+3. Highlighting logic MUST live in the ide / diff-presentation layer; it MUST NOT introduce git, PSI, or analysis data into the Compose rendering surface (ADR-009), nor bypass the ADR-001 layering.
 4. Highlighting MUST degrade safely: a block whose viewer exposes no usable editor, or a range that cannot be mapped to the shown side, MUST be skipped rather than failing the view.
 5. A highlight MUST remain visible over the diff tool's own line backgrounds.
 

@@ -5,6 +5,7 @@
 - Kotlin symbols can be overloaded, nested, moved, renamed, or unresolved.
 - IntelliJ or Kotlin semantic identifiers may not be available for every declaration during analysis.
 - Incorrect identity rules can merge unrelated symbols or split one logical symbol across graph phases.
+
 ## Constraints
 1. Node identity MUST be deterministic within a single analysis run.
 2. Node identity MUST distinguish node kinds: modules, packages, files, classes, and symbols (functions, properties).

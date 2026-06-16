@@ -5,6 +5,7 @@
 - Branch configuration can live in an action prompt, project setting, persisted plugin state, or another IDE mechanism.
 - The selected branch must be clear before analysis starts.
 - Configuration mistakes should fail early with useful diagnostics rather than producing an empty or misleading graph.
+
 ## Constraints
 1. The implementation MUST support configuring exactly one comparison branch.
 2. The implementation MUST make the selected branch visible before analysis runs.

@@ -1,0 +1,69 @@
+# Documentation audit — output of PDR-004 Documentation Audit.
+# Symbolic links excluded.
+
+[[issue]]
+id = "DA-020"
+type = "consistency"
+locations = ["ADR-022-approval-change-detection.md:13", "ADR-024-approval-under-rename-and-move.md:20", "ADR-023-container-approval.md:5-6", "ADR-023-container-approval.md:20"]
+message = "'Invalidation' is used with two meanings: a leaf approval entry being dropped because diffed content changed (ADR-018/022/024) vs a container ceasing to be fully validated with no entry dropped (ADR-023). ADR-023 itself notes the tension yet keeps 'invalidation' for a phenomenon it defines as derivation. Cross-referencing the term yields two different operations."
+
+[[issue]]
+id = "DA-021"
+type = "redundancy"
+locations = ["ADR-001-intellij-plugin-architecture.md:28", "ADR-001-intellij-plugin-architecture.md:43", "ADR-009-graph-rendering.md:21-23", "ADR-009-graph-rendering.md:30"]
+message = "The platform baseline (build 252 / 2025.2) and the 'consume from the platform-bundled runtime, do not bundle, versions track the platform' pinning policy are declared in both ADR-001 and ADR-009. ADR-001 claims to own the baseline ('this record owns that baseline'), yet ADR-009 restates the pinning rule instead of referencing it."
+
+[[issue]]
+id = "DA-022"
+type = "redundancy"
+locations = ["ADR-002-kotlin-project-model.md:23", "ADR-002-kotlin-project-model.md:32", "ADR-004-changed-symbol-detection.md:25", "ADR-004-changed-symbol-detection.md:36"]
+message = "The rule 'bridge discovered/detected declarations to ADR-005 node identity at the boundary so downstream phases share node identity' is declared near-verbatim in both ADR-002 and ADR-004 (ADR-004's rationale even notes it mirrors ADR-002). The same identity-bridging declaration repeated; arguably an ADR-005 concern that should be referenced once."
+
+[[issue]]
+id = "DA-023"
+type = "redundancy"
+locations = ["ADR-001-intellij-plugin-architecture.md:22", "ADR-007-graph-model.md:17", "ADR-008-collapsed-dependency-aggregation.md:16-17", "ADR-009-graph-rendering.md:17-18"]
+message = "The invariant 'render-facing projection is derived in the rendering layer from the domain graph + collapse state; orchestration produces the domain graph once and MUST NOT re-run per collapse/expand' is declared as a normative rule in four ADRs (001, 007, 008, 009). The core invariant should be owned by one record and referenced, not restated four times."
+
+[[issue]]
+id = "DA-024"
+type = "redundancy"
+locations = ["ADR-018-approval-model.md:41", "ADR-019-combined-diff-approval.md:34", "ADR-020-node-approval-indication.md:42", "ADR-023-container-approval.md:27"]
+message = "The statement 'every leaf under an approved container carries its own entry and can be un-approved individually, dropping the container to partial' is restated near-verbatim in ADR-018, 019, 020, and 023. ADR-018 owns the ripple model; the other records should cite it rather than re-declare the consequence."
+
+[[issue]]
+id = "DA-025"
+type = "redundancy"
+locations = ["ADR-018-approval-model.md:23", "ADR-018-approval-model.md:37", "ADR-023-container-approval.md:6", "ADR-023-container-approval.md:19-21"]
+message = "The 'no container entry / no aggregate fingerprint / container validation is derived (a container is validated iff every changed leaf in its subtree is validated)' rule is fully stated in both ADR-018 (Constraint/Decision/Rationale/Notes) and ADR-023. ADR-018:37 says ADR-023 now owns this derivation, yet ADR-018 still duplicates the full rule rather than referencing ADR-023."
+
+[[issue]]
+id = "DA-026"
+type = "redundancy"
+locations = ["ADR-022-approval-change-detection.md:14", "ADR-018-approval-model.md:37", "ADR-024-approval-under-rename-and-move.md:21", "ADR-024-approval-under-rename-and-move.md:36"]
+message = "The both-sides leaf-fingerprint definition is owned by ADR-022 but restated in ADR-018 Notes ('ADR-022 decides the leaf fingerprint is a hash of the node's verbatim diffed content on both sides ... no normalization for the MVP') and again in ADR-024. The definition is duplicated across three records instead of cited from ADR-022."
+
+[[issue]]
+id = "DA-027"
+type = "redundancy"
+locations = ["ADR-015-diff-gutter-decoration.md:38", "ADR-016-diff-range-highlighting.md:39", "ADR-016-diff-range-highlighting.md:41"]
+message = "ADR-015 and ADR-016 both restate, from each side, the shared-rules relationship ('split by surface — margin vs content — but share the same scoping, layering, disposal rules') and both propose consolidating the shared rules into one record. The shared-rules declaration and the consolidation suggestion are duplicated across the two docs."
+
+[[issue]]
+id = "DA-028"
+type = "coupling"
+locations = ["ADR-013-force-directed-graph-layout-engine.md:28-32"]
+message = "ADR-013 mixes two distinct concerns: the layout-engine architectural decision (ForceAtlas2 behind an adapter, off-thread, deterministic seeding) and a full software-licensing/distribution compliance process (CDDL/GPLv3 election, bundling license texts, transitive-license audit gating distribution, source-availability obligations). The licensing/distribution concern is a separable topic — and per PDR-002 'exclusively scoped to source code engineering; MUST NOT relate to project management concerns' it is arguably out of scope for an ADR — that dominates and dilutes the layout decision."
+
+[[issue]]
+id = "DA-029"
+type = "coupling"
+locations = ["ADR-001-intellij-plugin-architecture.md:8-9", "ADR-001-intellij-plugin-architecture.md:28-34", "ADR-001-intellij-plugin-architecture.md:46"]
+message = "ADR-001 co-locates two decision domains with different change cadences: the layered architecture / module boundaries, and the concrete build/toolchain baseline (platform target 252, Gradle plugin 2.x, JDK 21, Kotlin 2.1.x, Gradle 8.x, stdlib bundling). The record itself acknowledges the seam ('Fixing the baseline here rather than in a separate record'), confirming two concerns share one ADR."
+
+[[issue]]
+id = "DA-030"
+type = "coupling"
+locations = ["ADR-020-node-approval-indication.md:18-19", "ADR-020-node-approval-indication.md:28-37"]
+message = "ADR-020's declared scope is how a graph node surfaces and toggles approval (indication), but it also fixes the completeness-derivation source and restates ADR-023's full/partial/none three-state semantics, coupling the indication record to the invalidation-derivation record's content."
+

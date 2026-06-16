@@ -1,4 +1,4 @@
-# ADR-023 Container Approval Invalidation
+# ADR-023 Container Approval
 
 ## Problem & Context
 - ADR-018 ripples a container approval down to an entry per changed leaf in its subtree; a container carries no entry of its own. A container's validation is derived: it is validated iff every changed leaf under it is validated.
