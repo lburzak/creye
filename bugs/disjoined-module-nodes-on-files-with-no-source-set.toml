@@ -1,0 +1,19 @@
+actual = '''
+Graph structure:
+- `:feature` (??? - it's not a module, just a directory from Gradle standpoint)
+	- `:channels-list` (??? - still not full module qualifier from Gradle standpoint)
+		- `<default>` (??? - some placeholder)
+			- `build.gradle.kts` (file)
+- `:feature:channels-list` (module)
+	- `main` (source set)
+		- `pl.wp.videostar.channels_list.components` (package)
+			- ...
+'''
+expected = '''
+Graph structure:
+- `:feature:channels-list` (module)
+	- `build.gradle.kts` (file)
+	- `main` (source set)
+		- `pl.wp.videostar.channels_list.components` (package)
+			- ...
+'''

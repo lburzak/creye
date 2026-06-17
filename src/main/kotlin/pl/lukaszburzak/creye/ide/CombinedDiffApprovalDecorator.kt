@@ -207,8 +207,8 @@ private fun FrameDiffTool.DiffViewer.editorLineRange(startLine: Int, endLine: In
     val endIndex = endLine.toEditorLineIndex()?.coerceAtLeast(startIndex) ?: startIndex
     return when (this) {
         is UnifiedDiffViewer -> {
-            val start = transferRightLine(startIndex) ?: return null
-            val end = transferRightLine(endIndex)?.coerceAtLeast(start) ?: start
+            val start = transferRightLineToOneside(startIndex) ?: return null
+            val end = transferRightLineToOneside(endIndex)?.coerceAtLeast(start) ?: start
             EditorLineRange(editor, start, end)
         }
         is TwosideTextDiffViewer -> EditorLineRange(getEditor(Side.RIGHT), startIndex, endIndex)
@@ -217,8 +217,9 @@ private fun FrameDiffTool.DiffViewer.editorLineRange(startLine: Int, endLine: In
     }
 }
 
-private fun UnifiedDiffViewer.transferRightLine(line: Int): Int? =
-    runCatching { transferLineFromOneside(Side.RIGHT, line) }
+/** Maps a 0-based right-side (current) source line to its line in the unified oneside editor. */
+private fun UnifiedDiffViewer.transferRightLineToOneside(line: Int): Int? =
+    runCatching { transferLineToOneside(Side.RIGHT, line) }
         .getOrNull()
         ?.takeIf { it >= 0 }
 
