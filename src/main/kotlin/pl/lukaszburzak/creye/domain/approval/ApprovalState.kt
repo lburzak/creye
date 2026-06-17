@@ -124,6 +124,7 @@ fun approvalKey(path: NodePath): String =
     path.segments.joinToString(separator = "|") { pathSegment ->
         when (pathSegment) {
             is NodeSegment.Module -> segment("M", pathSegment.id)
+            is NodeSegment.SourceSet -> segment("SS", pathSegment.name)
             is NodeSegment.Package -> segment("P", pathSegment.fqName)
             is NodeSegment.File -> segment("F", pathSegment.name, pathSegment.moduleRelativePath)
             is NodeSegment.Class -> segment("C", pathSegment.name)

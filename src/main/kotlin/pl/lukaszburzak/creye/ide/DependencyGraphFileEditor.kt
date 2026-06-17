@@ -40,6 +40,7 @@ class DependencyGraphFileEditor(
         val state by controller.state.collectAsState()
         GraphSurface(
             state = state,
+            viewState = controller.viewState,
             onBranchSelected = controller::selectBranch,
             onRefresh = controller::refresh,
             onShowDiff = controller::showNodeDiff,

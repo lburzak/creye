@@ -3,6 +3,10 @@ package pl.lukaszburzak.creye.ide
 import com.intellij.openapi.application.EDT
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.editor.EditorFactory
+import com.intellij.openapi.editor.event.DocumentEvent
+import com.intellij.openapi.editor.event.DocumentListener
+import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.ui.Messages
 import com.intellij.openapi.vcs.changes.Change
 import git4idea.repo.GitRepositoryManager
@@ -10,6 +14,8 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -24,6 +30,7 @@ import pl.lukaszburzak.creye.orchestration.GraphAnalysisService
 import pl.lukaszburzak.creye.rendering.AnalysisPhase
 import pl.lukaszburzak.creye.rendering.ForceSettings
 import pl.lukaszburzak.creye.rendering.GraphPanelState
+import pl.lukaszburzak.creye.rendering.GraphViewState
 
 /**
  * Ide-layer glue between the rendering surface and orchestration (ADR-001): owns the
@@ -37,6 +44,12 @@ class GraphPanelController(
 ) {
     private val _state = MutableStateFlow(GraphPanelState())
     val state: StateFlow<GraphPanelState> = _state.asStateFlow()
+
+    /**
+     * View state hoisted out of the Compose composition so it survives editor tab changes
+     * (REQUIREMENTS: View state). Owned here because the controller outlives the editor panel.
+     */
+    val viewState = GraphViewState()
 
     /**
      * The combined diff to mount beside the graph (REQUIREMENTS: Combined Diff View), or null
@@ -56,8 +69,12 @@ class GraphPanelController(
     private var analysis: Deferred<GraphAnalysisResult>? = null
     private val diffPresenter = NodeDiffPresenter(project)
 
+    private var documentListenerRegistered = false
+    private var autoRefreshJob: Job? = null
+
     /** Restores ADR-011 state when the panel opens: branch list, persisted selection. */
     fun activate() {
+        ensureDocumentListener()
         val branches = localBranches()
         val persisted = DependencyGraphSettings.getInstance(project).branch
         when {
@@ -81,12 +98,45 @@ class GraphPanelController(
 
     fun selectBranch(branch: String) {
         DependencyGraphSettings.getInstance(project).branch = branch
+        // A different comparison branch is a different graph; view state must not carry over.
+        viewState.reset()
         _state.update { it.copy(selectedBranch = branch, configurationDiagnostic = null) }
         runAnalysis(branch)
     }
 
     fun refresh() {
         _state.value.selectedBranch?.let(::runAnalysis)
+    }
+
+    /**
+     * Editing a repository file must invalidate affected approvals immediately, without a manual
+     * Refresh (REQUIREMENTS: Approvals). A debounced re-analysis recomputes the changed symbols
+     * so approval fingerprints are re-evaluated against the edited content.
+     */
+    private fun ensureDocumentListener() {
+        if (documentListenerRegistered) return
+        documentListenerRegistered = true
+        EditorFactory.getInstance().eventMulticaster.addDocumentListener(
+            object : DocumentListener {
+                override fun documentChanged(event: DocumentEvent) {
+                    val file = FileDocumentManager.getInstance().getFile(event.document) ?: return
+                    if (!file.isInLocalFileSystem) return
+                    val root = repositoryRootPath() ?: return
+                    if (!file.path.startsWith("$root/")) return
+                    scheduleAutoRefresh()
+                }
+            },
+            project,
+        )
+    }
+
+    private fun scheduleAutoRefresh() {
+        if (_state.value.selectedBranch == null) return
+        autoRefreshJob?.cancel()
+        autoRefreshJob = scope.launch {
+            delay(AUTO_REFRESH_DELAY_MS)
+            refresh()
+        }
     }
 
     /** Persisted force-slider values (ADR-013), restored when the panel opens. */
@@ -169,7 +219,13 @@ class GraphPanelController(
             ?.branches?.localBranches?.map { it.name }?.sorted()
             ?: emptyList()
 
+    private fun repositoryRootPath(): String? =
+        GitRepositoryManager.getInstance(project).repositories.firstOrNull()?.root?.path
+
     companion object {
+        /** Debounce window collapsing a burst of edits into a single re-analysis. */
+        private const val AUTO_REFRESH_DELAY_MS = 800L
+
         fun getInstance(project: Project): GraphPanelController =
             project.getService(GraphPanelController::class.java)
     }

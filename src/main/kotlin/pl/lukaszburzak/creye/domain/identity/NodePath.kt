@@ -16,7 +16,11 @@ fun NodePath.fileSegment(): NodeSegment.File? =
     segments.filterIsInstance<NodeSegment.File>().firstOrNull()
 
 sealed interface NodeSegment {
+    /** Module container (ADR-005): parents all source sets of one Gradle module. */
     data class Module(val id: String) : NodeSegment
+
+    /** Source set within a module (e.g. `main`, `test`); child of [Module]. */
+    data class SourceSet(val name: String) : NodeSegment
 
     /** Uses [DEFAULT_PACKAGE] sentinel when no package is declared. */
     data class Package(val fqName: String) : NodeSegment

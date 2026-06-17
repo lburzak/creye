@@ -26,11 +26,28 @@ object NodePathFactory {
     fun filePath(file: KtFile, context: FileSegmentContext, fileName: String): NodePath {
         val packageName = file.packageFqName.asString().ifEmpty { NodeSegment.DEFAULT_PACKAGE }
         return NodePath(
-            listOf(
-                NodeSegment.Module(context.moduleId),
-                NodeSegment.Package(packageName),
-                NodeSegment.File(fileName, context.moduleRelativePath),
-            ),
+            moduleSegments(context.moduleId) +
+                listOf(
+                    NodeSegment.Package(packageName),
+                    NodeSegment.File(fileName, context.moduleRelativePath),
+                ),
+        )
+    }
+
+    /**
+     * Splits a Gradle module id into a module container and an optional source-set child.
+     * Gradle's external project id for a per-source-set module is `<projectPath>:<sourceSet>`
+     * (e.g. `creye:main`), so the last `:`-separated token is the source set. Ids without a
+     * `:` separator (the IntelliJ-module-name fallback) stay a single module container.
+     */
+    private fun moduleSegments(moduleId: String): List<NodeSegment> {
+        val separator = moduleId.lastIndexOf(':')
+        if (separator <= 0 || separator == moduleId.length - 1) {
+            return listOf(NodeSegment.Module(moduleId))
+        }
+        return listOf(
+            NodeSegment.Module(moduleId.substring(0, separator)),
+            NodeSegment.SourceSet(moduleId.substring(separator + 1)),
         )
     }
 

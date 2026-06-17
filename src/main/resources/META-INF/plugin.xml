@@ -34,5 +34,12 @@
                 description="Open the Kotlin symbol dependency graph for changes against a git branch">
             <add-to-group group-id="ToolsMenu" anchor="last"/>
         </action>
+        <action id="pl.lukaszburzak.creye.ToggleApprovalAtCaret"
+                class="pl.lukaszburzak.creye.ide.ToggleApprovalAtCaretAction"
+                text="Toggle Approval of Symbol with Cursor"
+                description="Toggle approval of the changed symbol whose range contains the combined-diff caret"
+                icon="AllIcons.Actions.Checked">
+            <keyboard-shortcut keymap="$default" first-keystroke="alt shift A"/>
+        </action>
     </actions>
 </idea-plugin>

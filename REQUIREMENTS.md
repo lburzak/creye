@@ -10,6 +10,17 @@
   - MUST NOT require graph analysis to rerun during render interactions
 - MUST be zoomable
 
+## View state
+
+- View state MUST survive an editor tab change
+  - Includes the expand/collapse frontier, selection, node positions, pan, zoom, simulation sliders, and the Show External toggle
+  - View state MUST reset only when analysis re-runs (branch change or refresh)
+
+## Module container
+
+- A module container node MUST parent all of a module's source sets
+  - Source sets of one module MUST appear as children of a single module container, not as separate top-level modules
+
 ## Node
 
 - MUST be circle with constant size
@@ -28,6 +39,9 @@
   - Class/Interface/Enum -> Circle
   - Package -> Square
   - Module -> Diamond
+  - Source set -> Hexagon
+- Representation MUST NOT render type icons inside nodes
+- Clicking a node MUST open the Combined Diff for that node and its descendants
 
 ## Edge
 
@@ -41,7 +55,7 @@
 - The graph MUST provide a "Show External nodes" toggle
   - When off, external nodes and edges targeting them MUST be hidden
   - When off, internal structure and its dependency edges MUST remain unaffected
-  - Default MUST be on
+  - Default MUST be off
 
 # Diff interpretation
 
@@ -138,6 +152,10 @@ The key words "MUST", "MUST NOT", "SHOULD", "SHOULD NOT", "MAY", and "OPTIONAL" 
 # Combined Diff View
 
 - MUST be opened side-by-side to graph
+- MUST provide a "Toggle approval of symbol with cursor" action
+  - The action MUST toggle approval of the changed symbol whose range contains the editor caret
+- MUST provide a "Collapse approved" checkbox
+  - When checked, fully approved files MUST be collapsed in the combined diff
 
 ## Approvals
 
@@ -145,6 +163,7 @@ The key words "MUST", "MUST NOT", "SHOULD", "SHOULD NOT", "MAY", and "OPTIONAL" 
 - Node representation MUST indicate its approval status
 - Approval status MUST be persisted
 - A node's approval MUST be invalidated when that node's diffed content changes; approvals for unchanged nodes MUST be retained
+- Editing a file MUST invalidate affected approvals immediately, without requiring a manual Refresh
 - File approval control MUST be displayed in Combined Diff
 - Approved code blocks MUST be highlighted in Combined Diff
 - A gutter icon MUST indicate approval status for classes/symbols

@@ -55,6 +55,7 @@ import pl.lukaszburzak.creye.domain.graph.DependencyClassification
 import pl.lukaszburzak.creye.domain.identity.NodePath
 import pl.lukaszburzak.creye.domain.identity.NodeSegment
 import pl.lukaszburzak.creye.domain.graph.GraphNodeId
+import pl.lukaszburzak.creye.rendering.GraphViewState
 import pl.lukaszburzak.creye.rendering.layout.GraphLayout
 import pl.lukaszburzak.creye.rendering.layout.LayoutMetrics
 import pl.lukaszburzak.creye.rendering.layout.LayoutPoint
@@ -106,6 +107,7 @@ fun GraphCanvas(
     visible: VisibleGraph,
     layout: GraphLayout,
     selected: GraphNodeId?,
+    viewState: GraphViewState,
     diagnosticNodes: Set<GraphNodeId>,
     onSelect: (GraphNodeId?) -> Unit,
     onShowDiff: (GraphNodeId.Structural) -> Unit,
@@ -128,8 +130,9 @@ fun GraphCanvas(
     canExpandNodeToSymbols: (GraphNodeId.Structural) -> Boolean,
     modifier: Modifier = Modifier,
 ) {
-    var pan by remember { mutableStateOf(Offset.Zero) }
-    var zoom by remember { mutableStateOf(1f) }
+    // Seeded from the controller-owned holder so pan/zoom survive a tab change (REQUIREMENTS).
+    var pan by remember { mutableStateOf(viewState.pan) }
+    var zoom by remember { mutableStateOf(viewState.zoom) }
     var canvasSize by remember { mutableStateOf(Size.Zero) }
     var dragTarget by remember { mutableStateOf<GraphNodeId?>(null) }
     var menuRequest by remember { mutableStateOf<MenuRequest?>(null) }
@@ -143,9 +146,6 @@ fun GraphCanvas(
                 put(GraphNodeId.External(external.id), textMeasurer.measure(external.id.displayName, labelTextStyle))
             }
         }
-    }
-    val iconMeasurements = remember(textMeasurer) {
-        listOf("M", "P", "F", "C", "ƒ").associateWith { textMeasurer.measure(it, iconTextStyle) }
     }
     val currentVisible by rememberUpdatedState(visible)
     val currentLayout by rememberUpdatedState(layout)
@@ -190,10 +190,16 @@ fun GraphCanvas(
         return id.takeIf { visibleNode?.isCollapsed == true }
     }
 
+    fun GraphNodeId.Structural.hasDiff(): Boolean {
+        val visibleNode = currentVisible.structuralNodes.firstOrNull { it.node.path == path } ?: return false
+        return visibleNode.node.change != null || visibleNode.hasDescendantChange
+    }
+
     fun centerOn(id: GraphNodeId) {
         val center = currentLayout.centerOf(id) ?: return
         if (canvasSize == Size.Zero) return
         pan = Offset(canvasSize.width / 2f - center.x * zoom, canvasSize.height / 2f - center.y * zoom)
+        viewState.pan = pan
     }
 
     fun goTo(id: GraphNodeId) {
@@ -253,7 +259,13 @@ fun GraphCanvas(
             }
             .pointerInput(Unit) {
                 detectTapGestures(
-                    onTap = { currentOnSelect(hit(it)) },
+                    onTap = { position ->
+                        val id = hit(position)
+                        currentOnSelect(id)
+                        // REQUIREMENTS (Node): a click opens the Combined Diff for the node.
+                        // Gated to nodes with a diff so clicking changeless nodes is a no-op.
+                        (id as? GraphNodeId.Structural)?.takeIf { it.hasDiff() }?.let(currentOnShowDiff)
+                    },
                     onDoubleTap = { position ->
                         expandableHit(position)?.let(currentOnExpand)
                     },
@@ -278,6 +290,7 @@ fun GraphCanvas(
                         val target = dragTarget
                         if (target == null) {
                             pan += dragAmount
+                            viewState.pan = pan
                         } else {
                             currentLayout.centerOf(target)?.let { center ->
                                 val graphDelta = LayoutPoint(dragAmount.x / zoom, dragAmount.y / zoom)
@@ -318,6 +331,8 @@ fun GraphCanvas(
                                 val newZoom = (oldZoom * factor).coerceIn(MIN_ZOOM, MAX_ZOOM)
                                 zoom = newZoom
                                 pan = change.position - graphPoint.toOffsetAt(newZoom)
+                                viewState.zoom = zoom
+                                viewState.pan = pan
                                 change.consume()
                             }
                         }
@@ -333,7 +348,7 @@ fun GraphCanvas(
                 scale(zoom, zoom, Offset.Zero) {
                     drawHierarchyEdges(visible, layout)
                     drawEdges(visible, layout)
-                    drawNodes(visible, layout, selected, diagnosticNodes, textMeasurer, labelMeasurements, iconMeasurements)
+                    drawNodes(visible, layout, selected, diagnosticNodes, textMeasurer, labelMeasurements)
                 }
             }
         }
@@ -484,7 +499,6 @@ private fun DrawScope.drawNodes(
     diagnosticNodes: Set<GraphNodeId>,
     textMeasurer: TextMeasurer,
     labelMeasurements: Map<GraphNodeId, TextLayoutResult>,
-    iconMeasurements: Map<String, TextLayoutResult>,
 ) {
     for (visibleNode in visible.structuralNodes.sortedBy { it.node.path.segments.size }) {
         val id = GraphNodeId.Structural(visibleNode.node.path)
@@ -498,10 +512,6 @@ private fun DrawScope.drawNodes(
         val center = rect.center.toOffset()
         val lastSegment = visibleNode.node.path.segments.last()
         drawNodeShape(lastSegment, center, fillColor)
-        val icon = nodeIcon(lastSegment)
-        iconMeasurements[icon]?.let { measured ->
-            drawText(measured, Palette.label, Offset(center.x - measured.size.width / 2f, center.y - measured.size.height / 2f))
-        }
         labelMeasurements[id]?.let { drawLabel(it, rect, Palette.label) }
         if (selected == id) {
             drawNodeShapeStroke(lastSegment, center, Palette.selection, radiusOffset = 3f, strokeWidth = 2.5f)
@@ -563,6 +573,7 @@ private fun DrawScope.drawNodeShape(segment: NodeSegment, center: Offset, color:
                 color,
             )
         }
+        is NodeSegment.SourceSet -> drawPath(hexagonPath(center, LayoutMetrics.NODE_RADIUS), color)
         else -> drawCircle(color, radius = LayoutMetrics.NODE_RADIUS, center = center)
     }
 }
@@ -599,16 +610,20 @@ private fun DrawScope.drawNodeShapeStroke(segment: NodeSegment, center: Offset, 
                 style = Stroke(width = strokeWidth),
             )
         }
+        is NodeSegment.SourceSet -> drawPath(hexagonPath(center, r), color, style = Stroke(width = strokeWidth))
         else -> drawCircle(color, radius = r, center = center, style = Stroke(width = strokeWidth))
     }
 }
 
-private fun nodeIcon(segment: NodeSegment): String = when (segment) {
-    is NodeSegment.Module -> "M"
-    is NodeSegment.Package -> "P"
-    is NodeSegment.File -> "F"
-    is NodeSegment.Class -> "C"
-    is NodeSegment.Symbol -> "ƒ"
+/** Flat-top hexagon centered at [center] with circumradius [radius] (source-set nodes). */
+private fun hexagonPath(center: Offset, radius: Float): Path = Path().apply {
+    for (i in 0 until 6) {
+        val angle = Math.toRadians((60.0 * i)).toFloat()
+        val x = center.x + radius * cos(angle)
+        val y = center.y + radius * sin(angle)
+        if (i == 0) moveTo(x, y) else lineTo(x, y)
+    }
+    close()
 }
 
 private fun DrawScope.drawLabel(
@@ -691,7 +706,6 @@ private fun DrawScope.drawCanvasMessage(textMeasurer: TextMeasurer, message: Str
 }
 
 private val labelTextStyle = TextStyle(fontSize = 11.sp)
-private val iconTextStyle = TextStyle(fontSize = 8.sp)
 
 private const val MIN_ZOOM = 0.25f
 private const val MAX_ZOOM = 4f

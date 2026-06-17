@@ -30,6 +30,39 @@ class ChangedSymbolDetectorTest : BasePlatformTestCase() {
         ChangedSymbolDetector(project) { path -> FileSegmentContext("mod", path) }
             .detect(ChangeComparison(files.toList(), emptyList()))
 
+    private fun detectWithModule(moduleId: String, vararg files: ChangedFile): ChangedSymbols =
+        ChangedSymbolDetector(project) { path -> FileSegmentContext(moduleId, path) }
+            .detect(ChangeComparison(files.toList(), emptyList()))
+
+    fun `test gradle source-set module id yields a module container parenting the source set`() {
+        val content = """
+            package demo
+
+            class Fresh
+        """.trimIndent()
+        val result = detectWithModule(
+            "creye:main",
+            ChangedFile("src/Fresh.kt", null, FileChangeState.ADDED, true, null, content, emptyList()),
+        )
+        val fileNode = result.changed.first { it.displayName == "Fresh.kt" }
+        val head = fileNode.identity.segments.take(2)
+        assertEquals(
+            listOf(NodeSegment.Module("creye"), NodeSegment.SourceSet("main")),
+            head,
+        )
+    }
+
+    fun `test module id without source-set suffix stays a single module container`() {
+        val content = "package demo\n\nclass Fresh"
+        val result = detectWithModule(
+            "creye",
+            ChangedFile("src/Fresh.kt", null, FileChangeState.ADDED, true, null, content, emptyList()),
+        )
+        val fileNode = result.changed.first { it.displayName == "Fresh.kt" }
+        assertEquals(NodeSegment.Module("creye"), fileNode.identity.segments.first())
+        assertTrue(fileNode.identity.segments.none { it is NodeSegment.SourceSet })
+    }
+
     private fun modified(path: String, baseline: String, current: String, vararg hunks: Hunk) =
         ChangedFile(path, null, FileChangeState.MODIFIED, true, baseline, current, hunks.toList())
 
@@ -195,6 +228,7 @@ class ChangedSymbolDetectorTest : BasePlatformTestCase() {
         is NodeSegment.Symbol -> segment.name
         is NodeSegment.File -> segment.name
         is NodeSegment.Module -> segment.id
+        is NodeSegment.SourceSet -> segment.name
         is NodeSegment.Package -> segment.fqName
     }
 }

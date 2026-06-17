@@ -38,6 +38,7 @@ private val errorColor = Color(0xFFE53935)
 @Composable
 fun GraphSurface(
     state: GraphPanelState,
+    viewState: GraphViewState,
     onBranchSelected: (String) -> Unit,
     onRefresh: () -> Unit,
     onShowDiff: (NodePath) -> Unit,
@@ -65,6 +66,7 @@ fun GraphSurface(
                     phase.graph,
                     changedSymbols = phase.result.detection.symbols,
                     approvals = phase.approvals,
+                    viewState = viewState,
                     onShowDiff = onShowDiff,
                     onToggleApproval = onToggleApproval,
                     forceSettings = forceSettings,

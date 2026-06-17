@@ -22,3 +22,9 @@ validation-steps = [
   "Confirm state survives once hoisted out of the composition into a lifetime that outlives the panel (controller/file-scoped holder).",
 ]
 probability = 5
+fix = """
+Hoisted view state into GraphViewState, owned by the project-scoped GraphPanelController so it
+outlives the JewelComposePanel composition. DependencyGraphView/GraphCanvas seed every piece of
+state (expand frontier, undo stack, selection, Show External, paused, pan, zoom, live node
+positions) from the holder and write changes back; the holder is reset only on branch change.
+"""

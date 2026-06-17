@@ -140,6 +140,7 @@ class ApprovalStateTest {
                 is NodeSegment.Class -> it.name
                 is NodeSegment.File -> it.name
                 is NodeSegment.Module -> it.id
+                is NodeSegment.SourceSet -> it.name
                 is NodeSegment.Package -> it.fqName
             }
         },

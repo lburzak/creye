@@ -21,6 +21,12 @@
 - [ ] Zoom in and out and confirm graph interaction remains usable.
 - [ ] Pause the living layout and confirm node motion stops.
 - [ ] Resume the living layout and confirm node motion continues.
+- [ ] Confirm nodes render without type-letter icons; shape alone indicates type (module diamond, source set hexagon, package square, class circle, symbol triangle).
+- [ ] Confirm a module container parents its source sets (e.g. `main`/`test` appear under one module, not as separate top-level modules).
+- [ ] Confirm external nodes are hidden by default and appear only after enabling "Show External nodes".
+- [ ] Click a node and confirm the Combined Diff opens for that node and its descendants.
+- [ ] Expand/pan/zoom, change a slider, switch to another editor tab and back, and confirm view state is preserved.
+- [ ] Change the comparison branch and confirm view state resets.
 
 ## Approvals
 
@@ -47,6 +53,10 @@
 - [ ] Confirm unfilled gutter circles toggle to filled when approved.
 - [ ] Confirm approved leaf ranges are highlighted.
 - [ ] Confirm the current combined-diff scroll position is preserved across approval toggles.
+- [ ] Place the caret inside a changed symbol in the combined diff and run "Toggle Approval of Symbol with Cursor" (Alt+Shift+A or Find Action); confirm that symbol's approval toggles.
+- [ ] Confirm the action appears in Find Action and is disabled when the combined diff is not focused.
+- [ ] Approve every changed symbol in a file, check "Collapse approved", and confirm that file collapses out of the combined diff; uncheck and confirm it returns.
+- [ ] Approve a changed leaf, then edit its file and confirm the approval is invalidated without pressing Refresh.
 
 ### Approval Marker Vocabulary
 

@@ -40,6 +40,7 @@ data class DependencyGraph(
 
 fun NodePath.displayName(): String = when (val segment = segments.last()) {
     is NodeSegment.Module -> segment.id
+    is NodeSegment.SourceSet -> segment.name
     is NodeSegment.Package -> segment.fqName
     is NodeSegment.File -> segment.name
     is NodeSegment.Class -> segment.name

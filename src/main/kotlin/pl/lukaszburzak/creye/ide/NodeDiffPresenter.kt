@@ -25,6 +25,8 @@ import com.intellij.openapi.actionSystem.ActionPlaces
 import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
+import com.intellij.openapi.actionSystem.DataSink
+import com.intellij.openapi.actionSystem.UiDataProvider
 import pl.lukaszburzak.creye.domain.approval.ApprovalState
 import pl.lukaszburzak.creye.domain.change.ChangedDeclaration
 import pl.lukaszburzak.creye.domain.change.ChangedSymbols
@@ -112,12 +114,12 @@ class NodeDiffPresenter(private val project: Project) {
         onClose: () -> Unit,
     ): Panel? {
         val processor = CombinedDiffManager.getInstance(project).createProcessor()
-        val blocks = changes.mapNotNull { change ->
+        val blockPairs = changes.mapNotNull { change ->
             val producer = ChangeDiffRequestProducer.create(project, change) ?: return@mapNotNull null
             val path = ChangesUtil.getFilePath(change)
-            CombinedBlockProducer(CombinedPathBlockId(path, change.fileStatus), producer)
+            CombinedBlockProducer(CombinedPathBlockId(path, change.fileStatus), producer) to change
         }
-        if (blocks.isEmpty()) {
+        if (blockPairs.isEmpty()) {
             Disposer.dispose(processor.disposable)
             return null
         }
@@ -127,12 +129,42 @@ class NodeDiffPresenter(private val project: Project) {
             decorations = approvalDecorations(symbols, approvals, fileTargets.map { it.first }),
             onToggleApproval = onToggleApproval,
         )
-        processor.setBlocks(blocks)
 
-        val container = JPanel(BorderLayout())
-        container.add(buildHeader(title, onClose), BorderLayout.NORTH)
+        // "Collapse approved" hides fully-approved files; recomputed on toggle and on approval change.
+        var latestApprovals = approvals
+        var collapseApproved = false
+        fun applyBlocks() {
+            val visible = if (!collapseApproved) {
+                blockPairs
+            } else {
+                blockPairs.filterNot { (_, change) -> isFullyApprovedFile(change, symbols, latestApprovals) }
+            }
+            processor.setBlocks(visible.map { it.first })
+        }
+        applyBlocks()
+
+        val toggleAtCaret = Runnable {
+            processor.changedSymbolAtCaret(symbols)?.let(onToggleApproval)
+        }
+        // Expose the caret-toggle through the data context so the registered IDE action can find
+        // it whenever this panel (or a descendant diff editor) holds focus.
+        val container = object : JPanel(BorderLayout()), UiDataProvider {
+            override fun uiDataSnapshot(sink: DataSink) {
+                sink[TOGGLE_APPROVAL_AT_CARET] = toggleAtCaret
+            }
+        }
+        container.add(
+            buildHeader(
+                title = title,
+                onClose = onClose,
+                onCollapseApprovedChange = { checked -> collapseApproved = checked; applyBlocks() },
+            ),
+            BorderLayout.NORTH,
+        )
         container.add(processor.component, BorderLayout.CENTER)
         return Panel(container, processor.disposable) { nextApprovals ->
+            latestApprovals = nextApprovals
+            if (collapseApproved) applyBlocks()
             decorationHandle?.update(approvalDecorations(symbols, nextApprovals, fileTargets.map { it.first }))
         }
     }
@@ -140,21 +172,30 @@ class NodeDiffPresenter(private val project: Project) {
     private fun buildHeader(
         title: String,
         onClose: () -> Unit,
+        onCollapseApprovedChange: (Boolean) -> Unit,
     ): JComponent {
         val header = JPanel(BorderLayout())
         header.border = JBUI.Borders.empty(4, 8)
         header.add(JBLabel(title), BorderLayout.WEST)
 
+        val east = JPanel()
+        east.isOpaque = false
+        val collapseApproved = javax.swing.JCheckBox("Collapse approved")
+        collapseApproved.isOpaque = false
+        collapseApproved.addActionListener { onCollapseApprovedChange(collapseApproved.isSelected) }
+        east.add(collapseApproved)
+
         val closeAction = object : AnAction("Close Diff", "Hide the combined diff view", AllIcons.Actions.Close) {
             override fun actionPerformed(e: AnActionEvent) = onClose()
             override fun getActionUpdateThread() = ActionUpdateThread.EDT
         }
+        // Toggle-at-caret stays a keymap/Find-Action action only — no toolbar button.
         val group = DefaultActionGroup()
         group.add(closeAction)
-        val toolbar = ActionManager.getInstance()
-            .createActionToolbar(ActionPlaces.UNKNOWN, group, true)
+        val toolbar = ActionManager.getInstance().createActionToolbar(ActionPlaces.UNKNOWN, group, true)
         toolbar.targetComponent = header
-        header.add(toolbar.component, BorderLayout.EAST)
+        east.add(toolbar.component)
+        header.add(east, BorderLayout.EAST)
         return header
     }
 
@@ -220,6 +261,16 @@ sealed interface ApprovalDiffDecoration {
         val startLine: Int,
         val endLine: Int,
     ) : ApprovalDiffDecoration
+}
+
+/** True when every changed declaration in [change]'s file is approved (a "fully approved file"). */
+private fun isFullyApprovedFile(change: Change, symbols: ChangedSymbols, approvals: ApprovalState): Boolean {
+    val changePath = ChangesUtil.getFilePath(change).path
+    val fileNode = symbols.changed.asSequence()
+        .filter { changePath == it.filePath || changePath.endsWith("/${it.filePath}") }
+        .mapNotNull { it.fileNode() }
+        .firstOrNull() ?: return false
+    return approvals.summary(fileNode, symbols)?.isFullyApproved == true
 }
 
 private fun fileApprovalTargets(changes: List<Change>, symbols: ChangedSymbols): List<Pair<NodePath, String>> {

@@ -25,6 +25,7 @@ import com.intellij.openapi.editor.markup.RangeHighlighter
 import com.intellij.openapi.editor.markup.TextAttributes
 import com.intellij.openapi.util.Disposer
 import com.intellij.util.ui.JBUI
+import pl.lukaszburzak.creye.domain.change.ChangedSymbols
 import pl.lukaszburzak.creye.domain.graph.displayName
 import pl.lukaszburzak.creye.domain.identity.NodePath
 import java.awt.BasicStroke
@@ -223,6 +224,48 @@ private fun UnifiedDiffViewer.transferRightLine(line: Int): Int? =
 
 private fun Int.toEditorLineIndex(): Int? =
     takeIf { it >= 1 }?.minus(1)
+
+/**
+ * Resolves the changed declaration whose current range contains the caret in the focused
+ * combined-diff block editor (REQUIREMENTS: Combined Diff toggle-approval action). Returns
+ * null when no block editor has focus or the caret is outside every changed range.
+ */
+internal fun CombinedDiffComponentProcessor.changedSymbolAtCaret(symbols: ChangedSymbols): NodePath? {
+    val model = combinedModel() ?: return null
+    for (block in blocks) {
+        if (model.getLoadedRequest(block.id) == null) continue
+        val viewer = diffViewerFor(block.id) ?: continue
+        val caretLine = viewer.focusedRightCaretLine() ?: continue
+        val blockPath = (block.id as? CombinedPathBlockId)?.path?.path ?: continue
+        val match = symbols.changed.firstOrNull { declaration ->
+            pathMatches(blockPath, declaration.filePath) &&
+                declaration.currentRange?.let { caretLine in it.startLine..it.endLine } == true
+        }
+        if (match != null) return match.identity
+    }
+    return null
+}
+
+/** 1-based right-side source line under the caret, or null when this viewer is not focused. */
+private fun FrameDiffTool.DiffViewer.focusedRightCaretLine(): Int? = when (this) {
+    is UnifiedDiffViewer -> {
+        val editor = this.editor
+        if (!editor.contentComponent.isFocusOwner) {
+            null
+        } else {
+            runCatching { transferLineFromOneside(Side.RIGHT, editor.caretModel.logicalPosition.line) }
+                .getOrNull()?.takeIf { it >= 0 }?.plus(1)
+        }
+    }
+    is TwosideTextDiffViewer -> {
+        val editor = getEditor(Side.RIGHT)
+        if (editor.contentComponent.isFocusOwner) editor.caretModel.logicalPosition.line + 1 else null
+    }
+    is EditorDiffViewer -> editors.singleOrNull()
+        ?.takeIf { it.contentComponent.isFocusOwner }
+        ?.let { it.caretModel.logicalPosition.line + 1 }
+    else -> null
+}
 
 private fun CombinedDiffComponentProcessor.combinedModel(): CombinedDiffModel? =
     runCatching {

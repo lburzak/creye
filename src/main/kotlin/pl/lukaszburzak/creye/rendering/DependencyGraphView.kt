@@ -61,26 +61,32 @@ fun DependencyGraphView(
     graph: DependencyGraph,
     changedSymbols: ChangedSymbols,
     approvals: ApprovalState,
+    viewState: GraphViewState = GraphViewState(),
     onShowDiff: (NodePath) -> Unit = {},
     onToggleApproval: (NodePath) -> Unit = {},
     forceSettings: ForceSettings = ForceSettings.DEFAULT,
     onForceSettingsChange: (ForceSettings) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
-    var expanded by remember(graph) { mutableStateOf(emptySet<NodePath>()) }
-    var undoStack by remember(graph) { mutableStateOf(emptyList<Set<NodePath>>()) }
-    var selected by remember(graph) { mutableStateOf<GraphNodeId?>(null) }
+    // Seed every piece of view state from the controller-owned holder so it survives a tab change.
+    var expanded by remember(graph) { mutableStateOf(viewState.expanded) }
+    var undoStack by remember(graph) { mutableStateOf(viewState.undoStack) }
+    var selected by remember(graph) { mutableStateOf(viewState.selected) }
 
     // Every expansion change records the prior frontier so the canvas Undo can restore it.
     fun updateExpanded(next: Set<NodePath>) {
         if (next == expanded) return
         undoStack = undoStack + listOf(expanded)
         expanded = next
+        viewState.expanded = next
+        viewState.undoStack = undoStack
     }
     fun undo() {
         val previous = undoStack.lastOrNull() ?: return
         undoStack = undoStack.dropLast(1)
         expanded = previous
+        viewState.expanded = previous
+        viewState.undoStack = undoStack
     }
 
     val parentsWithChildren = remember(graph) {
@@ -108,11 +114,11 @@ fun DependencyGraphView(
     var liveLayout by remember(graph) { mutableStateOf<GraphLayout?>(null) }
     var liveVisible by remember(graph) { mutableStateOf<VisibleGraph?>(null) }
     var viewport by remember(graph) { mutableStateOf<GraphSimulationViewport?>(null) }
-    var paused by remember(graph) { mutableStateOf(false) }
+    var paused by remember(graph) { mutableStateOf(viewState.paused) }
     var centerGravity by remember(graph) { mutableStateOf(forceSettings.gravity) }
     var nodeAttraction by remember(graph) { mutableStateOf(forceSettings.attraction) }
     var nodeRepulsion by remember(graph) { mutableStateOf(forceSettings.repulsion) }
-    var showExternal by remember(graph) { mutableStateOf(true) }
+    var showExternal by remember(graph) { mutableStateOf(viewState.showExternal) }
 
     // Persist any slider change so a readable layout survives sessions and rebuilds.
     fun persistForces() = onForceSettingsChange(ForceSettings(centerGravity, nodeAttraction, nodeRepulsion))
@@ -129,11 +135,14 @@ fun DependencyGraphView(
     }
     val seedLayout = remember(visible, layoutState) {
         val liveCenters = liveLayout?.centers().orEmpty()
+        // Restored positions (tab change) seed the layout so it resumes in place, not re-seeded.
+        val restored = viewState.centers
+        val hasSeeds = liveCenters.isNotEmpty() || restored.isNotEmpty()
         seedVisibleGraphLayout(
             visible = visible,
-            seeds = layoutState?.layout?.centers().orEmpty() + liveCenters,
-            normalize = liveCenters.isEmpty(),
-            resolveOverlap = liveCenters.isEmpty(),
+            seeds = restored + layoutState?.layout?.centers().orEmpty() + liveCenters,
+            normalize = !hasSeeds,
+            resolveOverlap = !hasSeeds,
         )
     }
     val activeLayoutState = layoutState?.takeIf { it.visible == visible }
@@ -148,8 +157,9 @@ fun DependencyGraphView(
     LaunchedEffect(visible) {
         val previousLayout = layoutState?.layout
         val liveCenters = liveLayout?.centers().orEmpty()
-        val preserveLivePositions = liveCenters.isNotEmpty()
-        val seeds = previousLayout?.centers().orEmpty() + liveCenters
+        val restored = viewState.centers
+        val preserveLivePositions = liveCenters.isNotEmpty() || restored.isNotEmpty()
+        val seeds = restored + previousLayout?.centers().orEmpty() + liveCenters
         val immediateLayout = when {
             preserveLivePositions -> seedVisibleGraphLayout(
                 visible = visible,
@@ -195,7 +205,9 @@ fun DependencyGraphView(
         viewport?.let { nextSimulation.setViewport(it.width, it.height) }
         simulation = nextSimulation
         liveVisible = visible
-        liveLayout = nextSimulation.layout()
+        val initialLayout = nextSimulation.layout()
+        liveLayout = initialLayout
+        viewState.centers = initialLayout.centers()
     }
 
     LaunchedEffect(visible) {
@@ -223,7 +235,10 @@ fun DependencyGraphView(
                 // Interaction (drag/disturb) re-injects velocity → energetic → wakes it.
                 if (lowEnergyFrames < QUIESCENCE_FRAMES || energetic) {
                     currentSimulation.step(deltaTime)
-                    liveLayout = currentSimulation.layout()
+                    val steppedLayout = currentSimulation.layout()
+                    liveLayout = steppedLayout
+                    // Persist positions each frame so a tab change restores the live layout.
+                    viewState.centers = steppedLayout.centers()
                     lowEnergyFrames = if (currentSimulation.kineticEnergy() > QUIESCENCE_ENERGY) 0 else lowEnergyFrames + 1
                 }
             }
@@ -235,8 +250,9 @@ fun DependencyGraphView(
             visible = visible,
             layout = layout,
             selected = selected,
+            viewState = viewState,
             diagnosticNodes = diagnosticNodes,
-            onSelect = { selected = it },
+            onSelect = { selected = it; viewState.selected = it },
             onShowDiff = { id -> onShowDiff(id.path) },
             onToggleApproval = { id -> onToggleApproval(id.path) },
             onExpand = { id -> updateExpanded(expanded + id.path) },
@@ -255,7 +271,9 @@ fun DependencyGraphView(
             onNodeDragged = { id, center, delta ->
                 simulation?.let {
                     it.drag(id, center, delta)
-                    liveLayout = it.layout()
+                    val draggedLayout = it.layout()
+                    liveLayout = draggedLayout
+                    viewState.centers = draggedLayout.centers()
                 }
             },
             onNodeDragEnd = { id -> simulation?.endDrag(id) },
@@ -273,7 +291,7 @@ fun DependencyGraphView(
             CheckboxRow(
                 text = "Show External nodes",
                 checked = showExternal,
-                onCheckedChange = { showExternal = it },
+                onCheckedChange = { showExternal = it; viewState.showExternal = it },
             )
             SimulationSliderControl(
                 label = "Gravity",
@@ -296,7 +314,7 @@ fun DependencyGraphView(
                 valueRange = 0f..ForceSettings.MAX_REPULSION,
                 valueLabel = percentLabel(nodeRepulsion, ForceSettings.MAX_REPULSION),
             )
-            OutlinedButton(onClick = { paused = !paused }) {
+            OutlinedButton(onClick = { paused = !paused; viewState.paused = paused }) {
                 Text(if (paused) "Resume" else "Pause")
             }
         }
@@ -390,10 +408,11 @@ private fun NodePath.parent(): NodePath? =
 /** Containment depth used to expand the frontier down to a target structural level. */
 private fun NodeSegment.rank(): Int = when (this) {
     is NodeSegment.Module -> 0
-    is NodeSegment.Package -> 1
-    is NodeSegment.File -> 2
-    is NodeSegment.Class -> 3
-    is NodeSegment.Symbol -> 4
+    is NodeSegment.SourceSet -> 1
+    is NodeSegment.Package -> 2
+    is NodeSegment.File -> 3
+    is NodeSegment.Class -> 4
+    is NodeSegment.Symbol -> 5
 }
 
 private fun NodePath.isDescendantOf(ancestor: NodePath): Boolean =
@@ -407,8 +426,8 @@ private data class GraphLayoutState(
     val messages: List<String>,
 )
 
-private const val CLASS_RANK = 3
-private const val SYMBOL_RANK = 4
+private const val CLASS_RANK = 4
+private const val SYMBOL_RANK = 5
 private const val FRAME_NANOS = 16_666_667f
 
 // Total kinetic energy below which the graph is treated as still (sum of per-node speed²).
