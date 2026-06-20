@@ -52,9 +52,9 @@ import org.jetbrains.jewel.ui.component.Text
 import pl.lukaszburzak.creye.domain.approval.ApprovalCompleteness
 import pl.lukaszburzak.creye.domain.change.ChangeKind
 import pl.lukaszburzak.creye.domain.graph.DependencyClassification
+import pl.lukaszburzak.creye.domain.graph.GraphNodeId
 import pl.lukaszburzak.creye.domain.identity.NodePath
 import pl.lukaszburzak.creye.domain.identity.NodeSegment
-import pl.lukaszburzak.creye.domain.graph.GraphNodeId
 import pl.lukaszburzak.creye.rendering.GraphViewState
 import pl.lukaszburzak.creye.rendering.layout.GraphLayout
 import pl.lukaszburzak.creye.rendering.layout.LayoutMetrics
@@ -63,7 +63,6 @@ import pl.lukaszburzak.creye.rendering.layout.LayoutRect
 import pl.lukaszburzak.creye.rendering.projection.VisibleEdge
 import pl.lukaszburzak.creye.rendering.projection.VisibleGraph
 import pl.lukaszburzak.creye.rendering.projection.VisibleNode
-import pl.lukaszburzak.creye.rendering.projection.ApprovalMarker
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.hypot
@@ -348,7 +347,7 @@ fun GraphCanvas(
                 scale(zoom, zoom, Offset.Zero) {
                     drawHierarchyEdges(visible, layout)
                     drawEdges(visible, layout)
-                    drawNodes(visible, layout, selected, diagnosticNodes, textMeasurer, labelMeasurements)
+                    drawNodes(visible, layout, selected, diagnosticNodes, textMeasurer, labelMeasurements, zoom)
                 }
             }
         }
@@ -499,7 +498,9 @@ private fun DrawScope.drawNodes(
     diagnosticNodes: Set<GraphNodeId>,
     textMeasurer: TextMeasurer,
     labelMeasurements: Map<GraphNodeId, TextLayoutResult>,
+    zoom: Float,
 ) {
+    val zoomCompensation = zoomCompensation(zoom)
     for (visibleNode in visible.structuralNodes.sortedBy { it.node.path.segments.size }) {
         val id = GraphNodeId.Structural(visibleNode.node.path)
         val rect = layout.bounds[id] ?: continue
@@ -512,9 +513,16 @@ private fun DrawScope.drawNodes(
         val center = rect.center.toOffset()
         val lastSegment = visibleNode.node.path.segments.last()
         drawNodeShape(lastSegment, center, fillColor)
+        drawApprovalRing(visibleNode, center, zoom)
         labelMeasurements[id]?.let { drawLabel(it, rect, Palette.label) }
         if (selected == id) {
-            drawNodeShapeStroke(lastSegment, center, Palette.selection, radiusOffset = 3f, strokeWidth = 2.5f)
+            drawNodeShapeStroke(
+                lastSegment,
+                center,
+                Palette.selection,
+                radiusOffset = SELECTION_RING_OFFSET * zoomCompensation,
+                strokeWidth = 2.5f * zoomCompensation,
+            )
         }
         if (visibleNode.isCollapsed) {
             drawNodeShapeStroke(lastSegment, center, Palette.collapsedRing, radiusOffset = -4f, strokeWidth = 1.4f)
@@ -522,7 +530,6 @@ private fun DrawScope.drawNodes(
         if (visibleNode.internalizedEdges.isNotEmpty()) {
             drawBadge(textMeasurer, rect, visibleNode.internalizedEdges.size)
         }
-        drawApprovalMarker(visibleNode, rect)
         if (id in diagnosticNodes) {
             drawCircle(Palette.diagnosticMarker, radius = 4f, center = Offset(center.x - 10f, center.y - 10f))
         }
@@ -578,8 +585,16 @@ private fun DrawScope.drawNodeShape(segment: NodeSegment, center: Offset, color:
     }
 }
 
-private fun DrawScope.drawNodeShapeStroke(segment: NodeSegment, center: Offset, color: Color, radiusOffset: Float, strokeWidth: Float) {
+private fun DrawScope.drawNodeShapeStroke(
+    segment: NodeSegment,
+    center: Offset,
+    color: Color,
+    radiusOffset: Float,
+    strokeWidth: Float,
+    pathEffect: PathEffect? = null,
+) {
     val r = LayoutMetrics.NODE_RADIUS + radiusOffset
+    val stroke = Stroke(width = strokeWidth, pathEffect = pathEffect)
     when (segment) {
         is NodeSegment.Symbol -> {
             drawPath(
@@ -590,12 +605,12 @@ private fun DrawScope.drawNodeShapeStroke(segment: NodeSegment, center: Offset, 
                     close()
                 },
                 color,
-                style = Stroke(width = strokeWidth),
+                style = stroke,
             )
         }
         is NodeSegment.Package -> {
             val s = r * 0.707f
-            drawRect(color, topLeft = Offset(center.x - s, center.y - s), size = Size(s * 2, s * 2), style = Stroke(width = strokeWidth))
+            drawRect(color, topLeft = Offset(center.x - s, center.y - s), size = Size(s * 2, s * 2), style = stroke)
         }
         is NodeSegment.Module -> {
             drawPath(
@@ -607,11 +622,11 @@ private fun DrawScope.drawNodeShapeStroke(segment: NodeSegment, center: Offset, 
                     close()
                 },
                 color,
-                style = Stroke(width = strokeWidth),
+                style = stroke,
             )
         }
-        is NodeSegment.SourceSet -> drawPath(hexagonPath(center, r), color, style = Stroke(width = strokeWidth))
-        else -> drawCircle(color, radius = r, center = center, style = Stroke(width = strokeWidth))
+        is NodeSegment.SourceSet -> drawPath(hexagonPath(center, r), color, style = stroke)
+        else -> drawCircle(color, radius = r, center = center, style = stroke)
     }
 }
 
@@ -648,35 +663,35 @@ private fun DrawScope.drawBadge(textMeasurer: TextMeasurer, rect: LayoutRect, co
     drawText(measured, Palette.label, Offset(center.x - measured.size.width / 2, center.y - measured.size.height / 2))
 }
 
-private fun DrawScope.drawApprovalMarker(visibleNode: VisibleNode, rect: LayoutRect) {
-    val approval = visibleNode.approval ?: return
-    val marker = visibleNode.approvalMarker ?: return
-    val nodeCenter = rect.center.toOffset()
-    val center = Offset(nodeCenter.x + 13f, nodeCenter.y + 13f)
-    val radius = 6f
-    when (marker) {
-        ApprovalMarker.LEAF -> {
-            if (approval.completeness == ApprovalCompleteness.FULL) {
-                drawCircle(Palette.approval, radius = radius, center = center)
-            }
-            drawCircle(Palette.approval, radius = radius, center = center, style = Stroke(width = 1.5f))
-        }
-        ApprovalMarker.CONTAINER -> {
-            val fraction = approval.approvedLeaves.toFloat() / approval.totalLeaves.toFloat()
-            if (fraction > 0f) {
-                drawArc(
-                    color = Palette.approval,
-                    startAngle = -90f,
-                    sweepAngle = 360f * fraction,
-                    useCenter = true,
-                    topLeft = Offset(center.x - radius, center.y - radius),
-                    size = Size(radius * 2f, radius * 2f),
-                )
-            }
-            drawCircle(Palette.approval, radius = radius, center = center, style = Stroke(width = 1.5f))
-        }
+private fun DrawScope.drawApprovalRing(
+    visibleNode: VisibleNode,
+    center: Offset,
+    zoom: Float,
+) {
+    val completeness = visibleNode.approval?.completeness ?: return
+    val zoomCompensation = zoomCompensation(zoom)
+    val strokeWidth = APPROVAL_RING_STROKE_WIDTH * zoomCompensation
+    val pathEffect = when (completeness) {
+        ApprovalCompleteness.FULL -> null
+        ApprovalCompleteness.PARTIAL -> PathEffect.dashPathEffect(
+            floatArrayOf(10f * zoomCompensation, 6f * zoomCompensation),
+            0f,
+        )
+        ApprovalCompleteness.NONE -> PathEffect.dashPathEffect(
+            floatArrayOf(2.5f * zoomCompensation, 6f * zoomCompensation),
+            0f,
+        )
     }
+    drawCircle(
+        color = Palette.approval,
+        radius = LayoutMetrics.NODE_RADIUS + APPROVAL_RING_PADDING * zoomCompensation,
+        center = center,
+        style = Stroke(width = strokeWidth, pathEffect = pathEffect),
+    )
 }
+
+private fun zoomCompensation(zoom: Float): Float =
+    1f / zoom.coerceAtLeast(MIN_ZOOM)
 
 private fun LayoutPoint.toOffset(): Offset = Offset(x, y)
 
@@ -710,3 +725,6 @@ private val labelTextStyle = TextStyle(fontSize = 11.sp)
 private const val MIN_ZOOM = 0.25f
 private const val MAX_ZOOM = 4f
 private const val ZOOM_STEP = 1.12f
+private const val APPROVAL_RING_PADDING = 8f
+private const val APPROVAL_RING_STROKE_WIDTH = 5f
+private const val SELECTION_RING_OFFSET = 15f

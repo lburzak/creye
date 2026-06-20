@@ -40,11 +40,11 @@
 - [ ] Open the dependency graph and select a comparison branch.
 - [ ] Approve a changed leaf from the node context menu.
 - [ ] Confirm the graph updates immediately without rerunning graph analysis.
-- [ ] Confirm the approved leaf shows a filled green approval badge.
+- [ ] Confirm the approved leaf shows a bold circular solid green approval ring with clear padding around the node.
 - [ ] Confirm the approved leaf context menu shows `Approved` with a trailing tick.
 - [ ] Approve a container and confirm descendant changed leaves become approved.
-- [ ] Confirm the approved container pie badge becomes full.
-- [ ] Revoke one approved leaf under that container and confirm the container drops to partial.
+- [ ] Confirm the approved container ring becomes thick and solid.
+- [ ] Revoke one approved leaf under that container and confirm the container drops to a dashed or segmented partial ring.
 - [ ] Reopen the graph and confirm approvals are restored from persisted project state.
 - [ ] Change only one approved leaf, refresh analysis, and confirm only that leaf loses approval while unchanged sibling approvals remain approved.
 - [ ] Open the combined diff and confirm no `Approve: X.kt` / `Approved: X.kt` buttons appear in the top header.
@@ -60,6 +60,9 @@
 
 ### Approval Marker Vocabulary
 
-- [ ] Confirm approved markers are filled green circles.
-- [ ] Confirm unapproved markers are unfilled green outline circles.
+- [ ] Confirm fully approved graph nodes use a bold circular solid green ring with clear padding around the node.
+- [ ] Confirm partially approved graph containers use a thick dashed or segmented green ring.
+- [ ] Confirm unapproved approvable graph nodes use a thick dotted green ring with the same line width as approved rings.
+- [ ] Confirm approval rings remain legible when zoomed out.
+- [ ] Confirm approval ring line width stays visually stable while zooming.
 - [ ] Confirm red is not used for unapproved approval state.

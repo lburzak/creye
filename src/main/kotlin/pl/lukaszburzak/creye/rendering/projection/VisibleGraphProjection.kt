@@ -22,13 +22,7 @@ data class VisibleNode(
     val internalizedEdges: Set<DependencyEdge>,
     val hasDescendantChange: Boolean,
     val approval: ApprovalSummary? = null,
-    val approvalMarker: ApprovalMarker? = null,
 )
-
-enum class ApprovalMarker {
-    LEAF,
-    CONTAINER,
-}
 
 /**
  * Aggregated visible edge (ADR-008): deduplicated by `(source, target)` so opposing
@@ -122,9 +116,6 @@ fun projectVisibleGraph(
                 internalizedEdges = internalized[node.path].orEmpty(),
                 hasDescendantChange = hasChangedDescendant,
                 approval = approval,
-                approvalMarker = approval?.let {
-                    if (hasChangedDescendant) ApprovalMarker.CONTAINER else ApprovalMarker.LEAF
-                },
             )
         }
     val hierarchyEdges = structuralNodes.mapNotNull { node ->

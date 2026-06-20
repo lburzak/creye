@@ -242,7 +242,6 @@ class VisibleGraphProjectionTest {
         )
 
         val node = visible.structuralNodes.single { it.node.path == symbolA }
-        assertEquals(ApprovalMarker.LEAF, node.approvalMarker)
         assertEquals(ApprovalCompleteness.FULL, node.approval?.completeness)
     }
 
@@ -253,7 +252,6 @@ class VisibleGraphProjectionTest {
 
         val none = projectVisibleGraph(graph, expanded = emptySet(), changedSymbols = symbols, approvals = ApprovalState())
             .structuralNodes.single { it.node.path == moduleA }
-        assertEquals(ApprovalMarker.CONTAINER, none.approvalMarker)
         assertEquals(ApprovalCompleteness.NONE, none.approval?.completeness)
 
         val partialApprovals = ApprovalState().toggle(symbolA, symbols)
@@ -275,7 +273,6 @@ class VisibleGraphProjectionTest {
 
         val node = visible.structuralNodes.single { it.node.path == moduleA }
         assertNull(node.approval)
-        assertNull(node.approvalMarker)
     }
 
     @Test
