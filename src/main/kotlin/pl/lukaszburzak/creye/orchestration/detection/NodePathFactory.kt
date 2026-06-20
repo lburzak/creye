@@ -10,10 +10,19 @@ import pl.lukaszburzak.creye.domain.identity.CallableDiscriminator
 import pl.lukaszburzak.creye.domain.identity.NodePath
 import pl.lukaszburzak.creye.domain.identity.NodeSegment
 
-/** Module context for the file segment; supplied by the caller (ADR-002 seam). */
+/**
+ * Module context for the file segment; supplied by the caller (ADR-002 seam).
+ *
+ * [moduleId] is the module *container* id with any source-set suffix already removed.
+ * [sourceSet] is the resolved source-set name (e.g. `main`, `test`) or null when the
+ * file's module is not a per-source-set module (a build-script holder module, or the
+ * IntelliJ-module-name fallback). The caller resolves the source set from the project
+ * model, so the path factory never has to guess it from the id string.
+ */
 data class FileSegmentContext(
     val moduleId: String,
     val moduleRelativePath: String,
+    val sourceSet: String? = null,
     val diagnostics: List<Diagnostic> = emptyList(),
 )
 
@@ -23,32 +32,23 @@ data class FileSegmentContext(
  */
 object NodePathFactory {
 
-    fun filePath(file: KtFile, context: FileSegmentContext, fileName: String): NodePath {
-        val packageName = file.packageFqName.asString().ifEmpty { NodeSegment.DEFAULT_PACKAGE }
-        return NodePath(
-            moduleSegments(context.moduleId) +
-                listOf(
-                    NodeSegment.Package(packageName),
-                    NodeSegment.File(fileName, context.moduleRelativePath),
-                ),
-        )
-    }
-
     /**
-     * Splits a Gradle module id into a module container and an optional source-set child.
-     * Gradle's external project id for a per-source-set module is `<projectPath>:<sourceSet>`
-     * (e.g. `creye:main`), so the last `:`-separated token is the source set. Ids without a
-     * `:` separator (the IntelliJ-module-name fallback) stay a single module container.
+     * Builds the ADR-005 path head: module container, optional source set, optional package,
+     * then file. The source set is omitted when the module is not a per-source-set module. The
+     * package is omitted for Kotlin scripts (`build.gradle.kts` and friends), which are not source
+     * files in a package-rooted source set and so attach directly under their module container.
      */
-    private fun moduleSegments(moduleId: String): List<NodeSegment> {
-        val separator = moduleId.lastIndexOf(':')
-        if (separator <= 0 || separator == moduleId.length - 1) {
-            return listOf(NodeSegment.Module(moduleId))
+    fun filePath(file: KtFile, context: FileSegmentContext, fileName: String): NodePath {
+        val segments = buildList {
+            add(NodeSegment.Module(context.moduleId))
+            context.sourceSet?.let { add(NodeSegment.SourceSet(it)) }
+            if (!file.isScript()) {
+                val packageName = file.packageFqName.asString().ifEmpty { NodeSegment.DEFAULT_PACKAGE }
+                add(NodeSegment.Package(packageName))
+            }
+            add(NodeSegment.File(fileName, context.moduleRelativePath))
         }
-        return listOf(
-            NodeSegment.Module(moduleId.substring(0, separator)),
-            NodeSegment.SourceSet(moduleId.substring(separator + 1)),
-        )
+        return NodePath(segments)
     }
 
     fun declarationPath(parent: NodePath, declaration: KtDeclaration): NodePath =

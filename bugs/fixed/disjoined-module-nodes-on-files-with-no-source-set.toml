@@ -1,0 +1,48 @@
+actual = '''
+Graph structure:
+- `:feature` (??? - it's not a module, just a directory from Gradle standpoint)
+	- `:channels-list` (??? - still not full module qualifier from Gradle standpoint)
+		- `<default>` (??? - some placeholder)
+			- `build.gradle.kts` (file)
+- `:feature:channels-list` (module)
+	- `main` (source set)
+		- `pl.wp.videostar.channels_list.components` (package)
+			- ...
+'''
+expected = '''
+Graph structure:
+- `:feature:channels-list` (module)
+	- `build.gradle.kts` (file)
+	- `main` (source set)
+		- `pl.wp.videostar.channels_list.components` (package)
+			- ...
+'''
+environment = "IntelliJ plugin graph editor in /Users/lburzak/dev/creye, analyzing a multi-module Gradle project with nested module paths (e.g. `:feature:channels-list`)."
+introduced-in-commit = "7326665bc04e60bcf4c7fab1ca33916874b33c65"
+reproduction-steps = [
+  "Analyze a Gradle project with a nested module path (`:feature:channels-list`) that contains both Kotlin source files and a `build.gradle.kts`.",
+  "Render the dependency graph.",
+  "Observe the `build.gradle.kts` sits under a split `:feature` -> `:channels-list` -> `<default>` branch, disjoined from the real `:feature:channels-list` module node holding the source sets.",
+]
+
+[[hypothesis]]
+probability = 5
+clues = [
+  "`NodePathFactory.moduleSegments` split the module id at the last `:`, assuming the final token is always a source set (doc: `<projectPath>:<sourceSet>`).",
+  "A `build.gradle.kts` belongs to the Gradle *holder* module whose external id is the bare project path `:feature:channels-list` (no source-set suffix); source files belong to the per-source-set module `:feature:channels-list:main`.",
+  "Splitting `:feature:channels-list` at the last `:` wrongly yields Module(`:feature`) + SourceSet(`channels-list`), a different module node than Module(`:feature:channels-list`) minted from `:feature:channels-list:main`.",
+  "`NodePathFactory.filePath` always appended a Package segment, so the package-less build script got a bogus `<default>` package node.",
+]
+validation-steps = [
+  "`ChangedSymbolDetectorTest` `test build script attaches directly under its module container with no source set or package` asserts a `.kts` file resolves to exactly Module + File.",
+  "`ProjectFileSegmentsTest` `test carries the resolved source set alongside the container id` asserts container/source-set are reported separately.",
+]
+fix = """
+Stopped guessing the source set from the id string. `ProjectFileSegments` now resolves the source
+set from the IntelliJ project model (`ExternalSystemModulePropertyManager.getExternalModuleType() ==
+"sourceSet"`) and only splits the external id into container + source set for confirmed per-source-set
+modules; holder/fallback modules keep their full id with no source set. `FileSegmentContext` carries
+an explicit `sourceSet: String?`. `NodePathFactory.filePath` emits the SourceSet segment only when
+present and skips the Package segment for Kotlin scripts (`KtFile.isScript()`), so `build.gradle.kts`
+attaches directly under its module container as a sibling of the source sets.
+"""

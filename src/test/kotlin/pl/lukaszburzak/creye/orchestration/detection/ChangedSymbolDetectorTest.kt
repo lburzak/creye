@@ -30,37 +30,55 @@ class ChangedSymbolDetectorTest : BasePlatformTestCase() {
         ChangedSymbolDetector(project) { path -> FileSegmentContext("mod", path) }
             .detect(ChangeComparison(files.toList(), emptyList()))
 
-    private fun detectWithModule(moduleId: String, vararg files: ChangedFile): ChangedSymbols =
-        ChangedSymbolDetector(project) { path -> FileSegmentContext(moduleId, path) }
+    private fun detectWithModule(moduleId: String, sourceSet: String? = null, vararg files: ChangedFile): ChangedSymbols =
+        ChangedSymbolDetector(project) { path -> FileSegmentContext(moduleId, path, sourceSet) }
             .detect(ChangeComparison(files.toList(), emptyList()))
 
-    fun `test gradle source-set module id yields a module container parenting the source set`() {
+    fun `test resolved source set yields a module container parenting the source set`() {
         val content = """
             package demo
 
             class Fresh
         """.trimIndent()
         val result = detectWithModule(
-            "creye:main",
+            ":feature:channels-list",
+            "main",
             ChangedFile("src/Fresh.kt", null, FileChangeState.ADDED, true, null, content, emptyList()),
         )
         val fileNode = result.changed.first { it.displayName == "Fresh.kt" }
         val head = fileNode.identity.segments.take(2)
         assertEquals(
-            listOf(NodeSegment.Module("creye"), NodeSegment.SourceSet("main")),
+            listOf(NodeSegment.Module(":feature:channels-list"), NodeSegment.SourceSet("main")),
             head,
         )
     }
 
-    fun `test module id without source-set suffix stays a single module container`() {
+    fun `test module with no source set stays a single module container`() {
         val content = "package demo\n\nclass Fresh"
         val result = detectWithModule(
             "creye",
+            null,
             ChangedFile("src/Fresh.kt", null, FileChangeState.ADDED, true, null, content, emptyList()),
         )
         val fileNode = result.changed.first { it.displayName == "Fresh.kt" }
         assertEquals(NodeSegment.Module("creye"), fileNode.identity.segments.first())
         assertTrue(fileNode.identity.segments.none { it is NodeSegment.SourceSet })
+    }
+
+    fun `test build script attaches directly under its module container with no source set or package`() {
+        val result = detectWithModule(
+            ":feature:channels-list",
+            null,
+            ChangedFile("feature/channels-list/build.gradle.kts", null, FileChangeState.ADDED, true, null, "plugins { kotlin(\"jvm\") }", emptyList()),
+        )
+        val fileNode = result.changed.first { it.displayName == "build.gradle.kts" }
+        assertEquals(
+            listOf<NodeSegment>(
+                NodeSegment.Module(":feature:channels-list"),
+                NodeSegment.File("build.gradle.kts", "feature/channels-list/build.gradle.kts"),
+            ),
+            fileNode.identity.segments,
+        )
     }
 
     private fun modified(path: String, baseline: String, current: String, vararg hunks: Hunk) =
