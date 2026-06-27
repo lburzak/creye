@@ -42,6 +42,7 @@
   - Source set -> Hexagon
 - Representation MUST NOT render type icons inside nodes
 - Clicking a node MUST open the Combined Diff for that node and its descendants
+- Graph MUST emphasise the visible node closest to the caret location in Combined Diff with a distinctive halo
 
 ## Edge
 

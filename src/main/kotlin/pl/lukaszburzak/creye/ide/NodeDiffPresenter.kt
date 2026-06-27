@@ -111,6 +111,7 @@ class NodeDiffPresenter(private val project: Project) {
         symbols: ChangedSymbols,
         approvals: ApprovalState,
         onToggleApproval: (NodePath) -> Unit,
+        onCaretNodeChange: (NodePath?) -> Unit,
         onClose: () -> Unit,
     ): Panel? {
         val processor = CombinedDiffManager.getInstance(project).createProcessor()
@@ -142,6 +143,7 @@ class NodeDiffPresenter(private val project: Project) {
             processor.setBlocks(visible.map { it.first })
         }
         applyBlocks()
+        CombinedDiffCaretTracker.install(processor, symbols, onCaretNodeChange)
 
         val toggleAtCaret = Runnable {
             processor.changedSymbolAtCaret(symbols)?.let(onToggleApproval)

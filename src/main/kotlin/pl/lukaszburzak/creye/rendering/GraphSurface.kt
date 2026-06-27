@@ -67,6 +67,7 @@ fun GraphSurface(
                     changedSymbols = phase.result.detection.symbols,
                     approvals = phase.approvals,
                     viewState = viewState,
+                    caretPath = state.diffCaretPath,
                     onShowDiff = onShowDiff,
                     onToggleApproval = onToggleApproval,
                     forceSettings = forceSettings,

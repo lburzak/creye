@@ -185,8 +185,15 @@ class GraphPanelController(
         _diffRequest.update { request -> request?.copy(approvals = approvals) }
     }
 
+    fun updateDiffCaret(node: NodePath?) {
+        _state.update { state ->
+            if (state.diffCaretPath == node) state else state.copy(diffCaretPath = node)
+        }
+    }
+
     /** Hides the combined diff view, e.g. from its close button. */
     fun closeDiff() {
+        updateDiffCaret(null)
         _diffRequest.value = null
     }
 
@@ -196,7 +203,7 @@ class GraphPanelController(
         analysis?.cancel()
         val deferred = GraphAnalysisService.getInstance(project).analyze(branch)
         analysis = deferred
-        _state.update { it.copy(phase = AnalysisPhase.Running) }
+        _state.update { it.copy(phase = AnalysisPhase.Running, diffCaretPath = null) }
         scope.launch {
             val phase = try {
                 val result = deferred.await()

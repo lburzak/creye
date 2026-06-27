@@ -3,6 +3,7 @@ package pl.lukaszburzak.creye.rendering
 import pl.lukaszburzak.creye.domain.approval.ApprovalState
 import pl.lukaszburzak.creye.domain.change.GraphAnalysisResult
 import pl.lukaszburzak.creye.domain.graph.DependencyGraph
+import pl.lukaszburzak.creye.domain.identity.NodePath
 
 /** Analysis lifecycle as seen by the render surface. */
 sealed interface AnalysisPhase {
@@ -26,5 +27,7 @@ data class GraphPanelState(
     val selectedBranch: String? = null,
     /** ADR-011: persisted branch missing from the branch list; selection stays empty. */
     val configurationDiagnostic: String? = null,
+    /** Changed declaration nearest to the caret in the plugin-owned combined diff, if any. */
+    val diffCaretPath: NodePath? = null,
     val phase: AnalysisPhase = AnalysisPhase.Idle,
 )

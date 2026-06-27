@@ -17,6 +17,8 @@ import com.intellij.openapi.actionSystem.ActionUpdateThread
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.editor.Editor
+import com.intellij.openapi.editor.event.CaretEvent
+import com.intellij.openapi.editor.event.CaretListener
 import com.intellij.openapi.editor.markup.EffectType
 import com.intellij.openapi.editor.markup.GutterIconRenderer
 import com.intellij.openapi.editor.markup.HighlighterLayer
@@ -25,7 +27,9 @@ import com.intellij.openapi.editor.markup.RangeHighlighter
 import com.intellij.openapi.editor.markup.TextAttributes
 import com.intellij.openapi.util.Disposer
 import com.intellij.util.ui.JBUI
+import pl.lukaszburzak.creye.domain.change.ChangedDeclaration
 import pl.lukaszburzak.creye.domain.change.ChangedSymbols
+import pl.lukaszburzak.creye.domain.change.SourceRange
 import pl.lukaszburzak.creye.domain.graph.displayName
 import pl.lukaszburzak.creye.domain.identity.NodePath
 import java.awt.BasicStroke
@@ -34,6 +38,8 @@ import java.awt.Font
 import java.awt.Graphics
 import java.awt.Graphics2D
 import java.awt.RenderingHints
+import java.awt.event.FocusAdapter
+import java.awt.event.FocusEvent
 import javax.swing.Icon
 
 /**
@@ -68,6 +74,121 @@ internal object CombinedDiffApprovalDecorator {
 internal class ApprovalDiffDecorationHandle(private val updateDecorations: (List<ApprovalDiffDecoration>) -> Unit) {
     fun update(decorations: List<ApprovalDiffDecoration>) {
         updateDecorations(decorations)
+    }
+}
+
+/** Tracks the caret in the plugin-owned combined diff and emits the nearest changed node path. */
+internal object CombinedDiffCaretTracker {
+    fun install(
+        processor: CombinedDiffComponentProcessor,
+        symbols: ChangedSymbols,
+        onCaretNodeChange: (NodePath?) -> Unit,
+    ) {
+        val model = processor.combinedModel()
+        if (model == null) {
+            onCaretNodeChange(null)
+            return
+        }
+        val disposable = Disposer.newDisposable("Creye combined diff caret tracker")
+        val tracker = DiffCaretTracker(processor, symbols, onCaretNodeChange)
+        Disposer.register(processor.disposable, disposable)
+        Disposer.register(disposable, Disposable {
+            tracker.clearAll()
+            onCaretNodeChange(null)
+        })
+        model.addListener(tracker, disposable)
+
+        tracker.installLoadedBlocks()
+        tracker.emitFocusedCaret()
+    }
+}
+
+private class DiffCaretTracker(
+    private val processor: CombinedDiffComponentProcessor,
+    private val symbols: ChangedSymbols,
+    private val onCaretNodeChange: (NodePath?) -> Unit,
+) : CombinedDiffModelListener {
+    private val installed = linkedMapOf<CombinedBlockId, Disposable>()
+    private var emitted: NodePath? = null
+
+    override fun onModelReset() {
+        clearAll()
+        emitFocusedCaret()
+    }
+
+    override fun onRequestsLoaded(blockId: CombinedBlockId, request: DiffRequest) {
+        clearBlock(blockId)
+        installBlock(blockId)
+        emitFocusedCaret()
+    }
+
+    override fun onRequestContentsUnloaded(requests: Map<CombinedBlockId, DiffRequest>) {
+        requests.keys.forEach(::clearBlock)
+        emitFocusedCaret()
+    }
+
+    fun installLoadedBlocks() {
+        val model = processor.combinedModel() ?: return
+        processor.blocks.forEach { block ->
+            if (model.getLoadedRequest(block.id) != null) {
+                installBlock(block.id)
+            }
+        }
+    }
+
+    fun clearAll() {
+        installed.keys.toList().forEach(::clearBlock)
+    }
+
+    fun emitFocusedCaret() {
+        val next = focusedChangedSymbol()
+        if (next != emitted) {
+            emitted = next
+            onCaretNodeChange(next)
+        }
+    }
+
+    private fun installBlock(blockId: CombinedBlockId) {
+        if (blockId in installed) return
+        val viewer = processor.diffViewerFor(blockId) ?: return
+        val editors = viewer.caretEditors()
+        if (editors.isEmpty()) return
+
+        val blockDisposable = Disposer.newDisposable("Creye combined diff caret block")
+        val caretListener = object : CaretListener {
+            override fun caretPositionChanged(event: CaretEvent) {
+                emitFocusedCaret()
+            }
+        }
+        editors.forEach { editor ->
+            editor.caretModel.addCaretListener(caretListener, blockDisposable)
+            val focusListener = object : FocusAdapter() {
+                override fun focusGained(event: FocusEvent) {
+                    emitFocusedCaret()
+                }
+            }
+            editor.contentComponent.addFocusListener(focusListener)
+            Disposer.register(blockDisposable, Disposable {
+                editor.contentComponent.removeFocusListener(focusListener)
+            })
+        }
+        installed[blockId] = blockDisposable
+    }
+
+    private fun clearBlock(blockId: CombinedBlockId) {
+        installed.remove(blockId)?.let(Disposer::dispose)
+    }
+
+    private fun focusedChangedSymbol(): NodePath? {
+        val model = processor.combinedModel() ?: return null
+        for (block in processor.blocks) {
+            if (model.getLoadedRequest(block.id) == null) continue
+            val viewer = processor.diffViewerFor(block.id) ?: continue
+            val location = viewer.focusedCaretLocation() ?: continue
+            val blockPath = (block.id as? CombinedPathBlockId)?.path?.path ?: return null
+            return symbols.closestChangedSymbolToCaret(blockPath, location.side, location.line)
+        }
+        return null
     }
 }
 
@@ -247,6 +368,51 @@ internal fun CombinedDiffComponentProcessor.changedSymbolAtCaret(symbols: Change
     return null
 }
 
+internal enum class DiffCaretSide { CURRENT, BASELINE }
+
+internal fun ChangedSymbols.closestChangedSymbolToCaret(
+    blockPath: String,
+    side: DiffCaretSide,
+    caretLine: Int,
+): NodePath? =
+    changed.asSequence()
+        .filter { declaration -> pathMatches(blockPath, declaration.filePath) }
+        .mapNotNull { declaration ->
+            val range = declaration.rangeFor(side) ?: return@mapNotNull null
+            ChangedSymbolDistance(
+                path = declaration.identity,
+                range = range,
+                distance = range.distanceTo(caretLine),
+            )
+        }
+        .minWithOrNull(
+            compareBy<ChangedSymbolDistance> { it.distance }
+                .thenByDescending { it.path.segments.size }
+                .thenBy { it.range.startLine }
+                .thenBy { it.range.endLine }
+                .thenBy { it.path.toString() },
+        )
+        ?.path
+
+private data class DiffCaretLocation(val side: DiffCaretSide, val line: Int)
+
+private data class ChangedSymbolDistance(
+    val path: NodePath,
+    val range: SourceRange,
+    val distance: Int,
+)
+
+private fun ChangedDeclaration.rangeFor(side: DiffCaretSide): SourceRange? = when (side) {
+    DiffCaretSide.CURRENT -> currentRange
+    DiffCaretSide.BASELINE -> baselineRange
+}
+
+private fun SourceRange.distanceTo(line: Int): Int = when {
+    line < startLine -> startLine - line
+    line > endLine -> line - endLine
+    else -> 0
+}
+
 /** 1-based right-side source line under the caret, or null when this viewer is not focused. */
 private fun FrameDiffTool.DiffViewer.focusedRightCaretLine(): Int? = when (this) {
     is UnifiedDiffViewer -> {
@@ -267,6 +433,46 @@ private fun FrameDiffTool.DiffViewer.focusedRightCaretLine(): Int? = when (this)
         ?.let { it.caretModel.logicalPosition.line + 1 }
     else -> null
 }
+
+private fun FrameDiffTool.DiffViewer.focusedCaretLocation(): DiffCaretLocation? = when (this) {
+    is UnifiedDiffViewer -> {
+        if (!editor.contentComponent.isFocusOwner) {
+            null
+        } else {
+            val onesideLine = editor.caretModel.logicalPosition.line
+            unifiedCaretLine(Side.RIGHT, onesideLine)?.let { DiffCaretLocation(DiffCaretSide.CURRENT, it) }
+                ?: unifiedCaretLine(Side.LEFT, onesideLine)?.let { DiffCaretLocation(DiffCaretSide.BASELINE, it) }
+        }
+    }
+    is TwosideTextDiffViewer -> {
+        val right = getEditor(Side.RIGHT)
+        val left = getEditor(Side.LEFT)
+        when {
+            right.contentComponent.isFocusOwner ->
+                DiffCaretLocation(DiffCaretSide.CURRENT, right.caretModel.logicalPosition.line + 1)
+            left.contentComponent.isFocusOwner ->
+                DiffCaretLocation(DiffCaretSide.BASELINE, left.caretModel.logicalPosition.line + 1)
+            else -> null
+        }
+    }
+    is EditorDiffViewer -> editors.singleOrNull()
+        ?.takeIf { it.contentComponent.isFocusOwner }
+        ?.let { DiffCaretLocation(DiffCaretSide.CURRENT, it.caretModel.logicalPosition.line + 1) }
+    else -> null
+}
+
+private fun FrameDiffTool.DiffViewer.caretEditors(): List<Editor> = when (this) {
+    is UnifiedDiffViewer -> listOf(editor)
+    is TwosideTextDiffViewer -> listOf(getEditor(Side.LEFT), getEditor(Side.RIGHT))
+    is EditorDiffViewer -> editors.toList()
+    else -> emptyList()
+}
+
+private fun UnifiedDiffViewer.unifiedCaretLine(side: Side, onesideLine: Int): Int? =
+    runCatching { transferLineFromOneside(side, onesideLine) }
+        .getOrNull()
+        ?.takeIf { it >= 0 }
+        ?.plus(1)
 
 private fun CombinedDiffComponentProcessor.combinedModel(): CombinedDiffModel? =
     runCatching {

@@ -62,6 +62,7 @@ fun DependencyGraphView(
     changedSymbols: ChangedSymbols,
     approvals: ApprovalState,
     viewState: GraphViewState = GraphViewState(),
+    caretPath: NodePath? = null,
     onShowDiff: (NodePath) -> Unit = {},
     onToggleApproval: (NodePath) -> Unit = {},
     forceSettings: ForceSettings = ForceSettings.DEFAULT,
@@ -148,6 +149,9 @@ fun DependencyGraphView(
     val activeLayoutState = layoutState?.takeIf { it.visible == visible }
         ?: GraphLayoutState(visible, seedLayout, isComputing = true, messages = validateLayout(visible, seedLayout).messages)
     val layout = liveLayout?.takeIf { liveVisible == visible } ?: activeLayoutState.layout
+    val caretEmphasis = remember(visible, caretPath) {
+        closestVisibleNodeToCaret(visible, caretPath)
+    }
 
     val diagnosticNodes = remember(graph) {
         graph.diagnostics
@@ -250,6 +254,7 @@ fun DependencyGraphView(
             visible = visible,
             layout = layout,
             selected = selected,
+            emphasized = caretEmphasis,
             viewState = viewState,
             diagnosticNodes = diagnosticNodes,
             onSelect = { selected = it; viewState.selected = it },
@@ -402,6 +407,14 @@ internal fun collapseSelfAndSiblings(expanded: Set<NodePath>, path: NodePath): S
     }
 }
 
+internal fun closestVisibleNodeToCaret(visible: VisibleGraph, caretPath: NodePath?): GraphNodeId.Structural? {
+    val target = caretPath ?: return null
+    val visiblePaths = visible.structuralNodes.mapTo(mutableSetOf()) { it.node.path }
+    return target.ancestorsAndSelf()
+        .lastOrNull { it in visiblePaths }
+        ?.let(GraphNodeId::Structural)
+}
+
 private fun NodePath.parent(): NodePath? =
     if (segments.size <= 1) null else NodePath(segments.subList(0, segments.size - 1))
 
@@ -418,6 +431,9 @@ private fun NodeSegment.rank(): Int = when (this) {
 private fun NodePath.isDescendantOf(ancestor: NodePath): Boolean =
     segments.size > ancestor.segments.size &&
         segments.take(ancestor.segments.size) == ancestor.segments
+
+private fun NodePath.ancestorsAndSelf(): Sequence<NodePath> =
+    (1..segments.size).asSequence().map { NodePath(segments.subList(0, it)) }
 
 private data class GraphLayoutState(
     val visible: VisibleGraph,

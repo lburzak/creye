@@ -85,6 +85,8 @@ private object Palette {
     val badgeFill = Color(0xFF455A64)
     val diagnosticMarker = Color(0xFFFFC107)
     val approval = Color(0xFF2E7D32)
+    val caretHalo = Color(0xFFFFD54F)
+    val caretHaloFill = Color(0x33FFD54F)
     val label = Color(0xFFECEFF1)
     val labelShadow = Color(0xCC263238)
     val collapsedRing = Color(0xFFECEFF1)
@@ -106,6 +108,7 @@ fun GraphCanvas(
     visible: VisibleGraph,
     layout: GraphLayout,
     selected: GraphNodeId?,
+    emphasized: GraphNodeId.Structural?,
     viewState: GraphViewState,
     diagnosticNodes: Set<GraphNodeId>,
     onSelect: (GraphNodeId?) -> Unit,
@@ -347,7 +350,7 @@ fun GraphCanvas(
                 scale(zoom, zoom, Offset.Zero) {
                     drawHierarchyEdges(visible, layout)
                     drawEdges(visible, layout)
-                    drawNodes(visible, layout, selected, diagnosticNodes, textMeasurer, labelMeasurements, zoom)
+                    drawNodes(visible, layout, selected, emphasized, diagnosticNodes, textMeasurer, labelMeasurements, zoom)
                 }
             }
         }
@@ -495,6 +498,7 @@ private fun DrawScope.drawNodes(
     visible: VisibleGraph,
     layout: GraphLayout,
     selected: GraphNodeId?,
+    emphasized: GraphNodeId.Structural?,
     diagnosticNodes: Set<GraphNodeId>,
     textMeasurer: TextMeasurer,
     labelMeasurements: Map<GraphNodeId, TextLayoutResult>,
@@ -512,6 +516,9 @@ private fun DrawScope.drawNodes(
         }
         val center = rect.center.toOffset()
         val lastSegment = visibleNode.node.path.segments.last()
+        if (emphasized == id) {
+            drawCaretHalo(center, zoom)
+        }
         drawNodeShape(lastSegment, center, fillColor)
         drawApprovalRing(visibleNode, center, zoom)
         labelMeasurements[id]?.let { drawLabel(it, rect, Palette.label) }
@@ -548,6 +555,27 @@ private fun DrawScope.drawNodes(
             drawCircle(Palette.diagnosticMarker, radius = 4f, center = Offset(center.x - 10f, center.y - 10f))
         }
     }
+}
+
+private fun DrawScope.drawCaretHalo(center: Offset, zoom: Float) {
+    val zoomCompensation = zoomCompensation(zoom)
+    drawCircle(
+        Palette.caretHaloFill,
+        radius = LayoutMetrics.NODE_RADIUS + 15f * zoomCompensation,
+        center = center,
+    )
+    drawCircle(
+        Palette.caretHalo,
+        radius = LayoutMetrics.NODE_RADIUS + 10f * zoomCompensation,
+        center = center,
+        style = Stroke(width = 3f * zoomCompensation),
+    )
+    drawCircle(
+        Palette.caretHalo.copy(alpha = 0.82f),
+        radius = LayoutMetrics.NODE_RADIUS + 16f * zoomCompensation,
+        center = center,
+        style = Stroke(width = 1.4f * zoomCompensation),
+    )
 }
 
 private fun DrawScope.drawNodeShape(segment: NodeSegment, center: Offset, color: Color) {

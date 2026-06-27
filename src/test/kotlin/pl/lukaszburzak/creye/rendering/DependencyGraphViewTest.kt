@@ -2,8 +2,12 @@ package pl.lukaszburzak.creye.rendering
 
 import junit.framework.TestCase.assertEquals
 import org.junit.Test
+import pl.lukaszburzak.creye.domain.graph.GraphNodeId
+import pl.lukaszburzak.creye.domain.graph.StructuralNode
 import pl.lukaszburzak.creye.domain.identity.NodePath
 import pl.lukaszburzak.creye.domain.identity.NodeSegment
+import pl.lukaszburzak.creye.rendering.projection.VisibleGraph
+import pl.lukaszburzak.creye.rendering.projection.VisibleNode
 
 class DependencyGraphViewTest {
 
@@ -34,6 +38,34 @@ class DependencyGraphViewTest {
 
         assertEquals(emptySet<NodePath>(), collapseSelfAndSiblings(expanded, module))
     }
+
+    @Test
+    fun `caret emphasis resolves to deepest visible ancestor`() {
+        val visible = visibleGraph(module, pkg, fileA)
+
+        assertEquals(GraphNodeId.Structural(fileA), closestVisibleNodeToCaret(visible, symbolA))
+    }
+
+    @Test
+    fun `caret emphasis is absent when no ancestor is visible`() {
+        val visible = visibleGraph(otherPackage)
+
+        assertEquals(null, closestVisibleNodeToCaret(visible, symbolA))
+    }
+
+    private fun visibleGraph(vararg paths: NodePath) =
+        VisibleGraph(
+            structuralNodes = paths.map { path ->
+                VisibleNode(
+                    node = StructuralNode(path, path.segments.last().toString(), change = null),
+                    isCollapsed = false,
+                    internalizedEdges = emptySet(),
+                    hasDescendantChange = false,
+                )
+            },
+            externalNodes = emptyList(),
+            edges = emptyList(),
+        )
 
     private fun NodePath.child(segment: NodeSegment): NodePath = NodePath(segments + segment)
 }

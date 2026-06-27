@@ -79,6 +79,7 @@ class DependencyGraphFileEditor(
                         request.symbols,
                         request.approvals,
                         controller::toggleApproval,
+                        controller::updateDiffCaret,
                         controller::closeDiff,
                     )
                 }
@@ -93,6 +94,7 @@ class DependencyGraphFileEditor(
         diffDisposable = null
         diffPanel = null
         diffRequest = null
+        controller.updateDiffCaret(null)
     }
 
     override fun getComponent(): JComponent = splitter

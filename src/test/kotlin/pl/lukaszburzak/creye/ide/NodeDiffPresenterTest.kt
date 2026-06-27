@@ -70,6 +70,32 @@ class NodeDiffPresenterTest {
         )
     }
 
+    @Test
+    fun `closest changed symbol to caret prefers the nearest current-side declaration`() {
+        val symbols = symbols(
+            declaration(grow, line = 10),
+            declaration(shrink, line = 20),
+        )
+
+        assertEquals(shrink, symbols.closestChangedSymbolToCaret("/repo/src/A.kt", DiffCaretSide.CURRENT, caretLine = 18))
+    }
+
+    @Test
+    fun `closest changed symbol to caret can use baseline ranges`() {
+        val symbols = symbols(
+            ChangedDeclaration(
+                identity = shrink,
+                kind = ChangeKind.DELETED,
+                filePath = "src/A.kt",
+                displayName = "shrink",
+                baselineRange = SourceRange(0, 10, 30, 32),
+                baselineText = "fun shrink() = 1",
+            ),
+        )
+
+        assertEquals(shrink, symbols.closestChangedSymbolToCaret("src/A.kt", DiffCaretSide.BASELINE, caretLine = 31))
+    }
+
     private fun declaration(path: NodePath, line: Int) =
         ChangedDeclaration(
             identity = path,
