@@ -160,6 +160,13 @@ The key words "MUST", "MUST NOT", "SHOULD", "SHOULD NOT", "MAY", and "OPTIONAL" 
 - MUST include "Scope to selected node"
   - Invocation MUST filter the graph to the selected node and its dependencies (action, not checkbox), for isolation
   - Invocation MUST show the active filter in the graph control row, with a "clear" button
+- MUST include "Approve symbol at caret"
+  - Invocation MUST toggle approval of the changed symbol nearest the combined-diff caret
+  - MUST act on that symbol even when it is collapsed (hidden) in the graph,
+    distinguishing it from "Approve selected node"
+- MUST include "Collapse module of selected node"
+  - Invocation MUST collapse the module subtree containing the selected node, hiding its descendants
+- Node selection MUST update on pointer press, not deferred to click release
 
 # Combined Diff View
 

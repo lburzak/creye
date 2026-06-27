@@ -264,6 +264,7 @@ fun GraphCanvas(
             }
             .pointerInput(Unit) {
                 detectTapGestures(
+                    onPress = { position -> hit(position)?.let(currentOnSelect) },
                     onTap = { position ->
                         val id = hit(position)
                         currentOnSelect(id)

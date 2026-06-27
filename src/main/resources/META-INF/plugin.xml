@@ -53,5 +53,17 @@
                 icon="AllIcons.Actions.Checked">
             <keyboard-shortcut keymap="$default" first-keystroke="alt shift A"/>
         </action>
+        <action id="pl.lukaszburzak.creye.ApproveSymbolAtCaret"
+                class="pl.lukaszburzak.creye.ide.ApproveSymbolAtCaretAction"
+                text="Approve Symbol at Caret"
+                description="Toggle approval of the changed symbol nearest the combined-diff caret, even if collapsed in the graph">
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+        </action>
+        <action id="pl.lukaszburzak.creye.CollapseModuleOfSelectedNode"
+                class="pl.lukaszburzak.creye.ide.CollapseModuleOfSelectedNodeAction"
+                text="Collapse Module of Selected Node"
+                description="Collapse the module subtree containing the selected node">
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+        </action>
     </actions>
 </idea-plugin>

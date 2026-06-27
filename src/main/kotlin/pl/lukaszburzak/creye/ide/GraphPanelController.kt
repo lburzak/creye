@@ -16,8 +16,11 @@ import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -219,6 +222,22 @@ class GraphPanelController(
     /** IDE action (REQUIREMENTS: IntelliJ Actions): isolates the graph to the selected node. */
     fun scopeToSelectedNode() {
         selectedNode()?.let { _scopeFilter.value = it }
+    }
+
+    /** The changed symbol nearest the combined-diff caret, or null; drives the caret-targeted action. */
+    fun caretNode(): NodePath? = _state.value.diffCaretPath
+
+    /** IDE action (REQUIREMENTS: IntelliJ Actions): toggles approval of the caret-nearest symbol. */
+    fun approveSymbolAtCaret() {
+        caretNode()?.let(::toggleApproval)
+    }
+
+    private val _collapseModuleRequest = MutableSharedFlow<NodePath>(extraBufferCapacity = 1)
+    val collapseModuleRequest: SharedFlow<NodePath> = _collapseModuleRequest.asSharedFlow()
+
+    /** IDE action (REQUIREMENTS: IntelliJ Actions): collapses the module subtree of the selected node. */
+    fun collapseModuleOfSelectedNode() {
+        selectedNode()?.let { _collapseModuleRequest.tryEmit(it) }
     }
 
     /** Clears the isolation filter so the full graph is shown again. */

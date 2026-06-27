@@ -25,6 +25,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.withContext
 import org.jetbrains.jewel.ui.component.CheckboxRow
 import org.jetbrains.jewel.ui.component.OutlinedButton
@@ -72,6 +74,7 @@ fun DependencyGraphView(
     onClearScope: () -> Unit = {},
     forceSettings: ForceSettings = ForceSettings.DEFAULT,
     onForceSettingsChange: (ForceSettings) -> Unit = {},
+    collapseModuleRequests: Flow<NodePath>? = null,
     modifier: Modifier = Modifier,
 ) {
     // Seed every piece of view state from the controller-owned holder so it survives a tab change.
@@ -258,6 +261,14 @@ fun DependencyGraphView(
         }
     }
 
+    if (collapseModuleRequests != null) {
+        LaunchedEffect(collapseModuleRequests) {
+            collapseModuleRequests.collect { node ->
+                node.moduleAncestor()?.let { updateExpanded(collapseSubtree(expanded, it)) }
+            }
+        }
+    }
+
     Column(modifier = modifier.fillMaxSize()) {
         GraphCanvas(
             visible = visible,
@@ -427,6 +438,12 @@ private fun ForceSlider(
 
 private fun percentLabel(value: Float, maxValue: Float): String =
     "${((value / maxValue) * 100).toInt()}%"
+
+internal fun collapseSubtree(expanded: Set<NodePath>, root: NodePath): Set<NodePath> =
+    expanded.filterNotTo(mutableSetOf()) { it == root || it.isDescendantOf(root) }
+
+private fun NodePath.moduleAncestor(): NodePath? =
+    segments.firstOrNull()?.takeIf { it is NodeSegment.Module }?.let { NodePath(listOf(it)) }
 
 internal fun collapseSelfAndSiblings(expanded: Set<NodePath>, path: NodePath): Set<NodePath> {
     val parent = path.parent()

@@ -20,6 +20,7 @@ import org.jetbrains.jewel.ui.component.CircularProgressIndicator
 import org.jetbrains.jewel.ui.component.ListComboBox
 import org.jetbrains.jewel.ui.component.OutlinedButton
 import org.jetbrains.jewel.ui.component.Text
+import kotlinx.coroutines.flow.Flow
 import pl.lukaszburzak.creye.domain.diagnostics.Diagnostic
 import pl.lukaszburzak.creye.domain.diagnostics.DiagnosticAttachment
 import pl.lukaszburzak.creye.domain.diagnostics.Severity
@@ -47,6 +48,7 @@ fun GraphSurface(
     onClearScope: () -> Unit = {},
     forceSettings: ForceSettings,
     onForceSettingsChange: (ForceSettings) -> Unit,
+    collapseModuleRequests: Flow<NodePath>? = null,
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
         Header(state, onBranchSelected, onRefresh)
@@ -76,6 +78,7 @@ fun GraphSurface(
                     onClearScope = onClearScope,
                     forceSettings = forceSettings,
                     onForceSettingsChange = onForceSettingsChange,
+                    collapseModuleRequests = collapseModuleRequests,
                     modifier = Modifier.weight(1f),
                 )
                 GraphDiagnostics(phase.graph.diagnostics)

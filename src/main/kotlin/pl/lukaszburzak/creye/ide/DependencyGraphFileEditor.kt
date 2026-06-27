@@ -50,6 +50,7 @@ class DependencyGraphFileEditor(
             onClearScope = controller::clearScope,
             forceSettings = controller.forceSettings(),
             onForceSettingsChange = controller::updateForceSettings,
+            collapseModuleRequests = controller.collapseModuleRequest,
         )
     }
 

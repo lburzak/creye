@@ -43,3 +43,42 @@ class ScopeToSelectedNodeAction : AnAction(), DumbAware {
 
     override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
 }
+
+/**
+ * Toggles approval of the changed symbol nearest the combined-diff caret (REQUIREMENTS: IntelliJ Actions).
+ * Operates on the deep symbol path regardless of whether it is visible in the graph,
+ * distinguishing it from [ApproveSelectedNodeAction].
+ */
+class ApproveSymbolAtCaretAction : AnAction(), DumbAware {
+
+    override fun actionPerformed(e: AnActionEvent) {
+        val project = e.project ?: return
+        GraphPanelController.getInstance(project).approveSymbolAtCaret()
+    }
+
+    override fun update(e: AnActionEvent) {
+        e.presentation.isEnabled =
+            e.project?.let { GraphPanelController.getInstance(it).caretNode() } != null
+    }
+
+    override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
+}
+
+/**
+ * Collapses the module subtree containing the selected node (REQUIREMENTS: IntelliJ Actions).
+ * Folds the entire module into its root node; canvas Undo restores the prior expansion.
+ */
+class CollapseModuleOfSelectedNodeAction : AnAction(), DumbAware {
+
+    override fun actionPerformed(e: AnActionEvent) {
+        val project = e.project ?: return
+        GraphPanelController.getInstance(project).collapseModuleOfSelectedNode()
+    }
+
+    override fun update(e: AnActionEvent) {
+        e.presentation.isEnabled =
+            e.project?.let { GraphPanelController.getInstance(it).selectedNode() } != null
+    }
+
+    override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.BGT
+}
