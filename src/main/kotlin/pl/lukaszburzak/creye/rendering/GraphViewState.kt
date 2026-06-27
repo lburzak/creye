@@ -18,6 +18,7 @@ class GraphViewState {
     var undoStack: List<Set<NodePath>> = emptyList()
     var selected: GraphNodeId? = null
     var showExternal: Boolean = false
+    var showApprovalPercent: Boolean = false
     var paused: Boolean = false
     var pan: Offset = Offset.Zero
     var zoom: Float = 1f
@@ -29,6 +30,7 @@ class GraphViewState {
         undoStack = emptyList()
         selected = null
         showExternal = false
+        showApprovalPercent = false
         paused = false
         pan = Offset.Zero
         zoom = 1f

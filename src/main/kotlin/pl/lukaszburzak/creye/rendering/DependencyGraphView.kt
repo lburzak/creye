@@ -34,6 +34,8 @@ import pl.lukaszburzak.creye.domain.change.ChangedSymbols
 import pl.lukaszburzak.creye.domain.diagnostics.DiagnosticAttachment
 import pl.lukaszburzak.creye.domain.graph.DependencyGraph
 import pl.lukaszburzak.creye.domain.graph.GraphNodeId
+import pl.lukaszburzak.creye.domain.graph.displayName
+import pl.lukaszburzak.creye.domain.graph.scopedTo
 import pl.lukaszburzak.creye.domain.identity.NodePath
 import pl.lukaszburzak.creye.domain.identity.NodeSegment
 import pl.lukaszburzak.creye.rendering.canvas.GraphCanvas
@@ -50,6 +52,7 @@ import pl.lukaszburzak.creye.rendering.projection.projectVisibleGraph
 private val layoutWarningColor = Color(0xFFFFB300)
 private val controlTrackColor = Color(0xFF607D8B)
 private val controlFillColor = Color(0xFF42A5F5)
+private val scopeChipColor = Color(0xFFFFB300)
 
 /**
  * State owner for one rendered graph (ADR-009): collapse state and selection live here
@@ -64,6 +67,8 @@ fun DependencyGraphView(
     viewState: GraphViewState = GraphViewState(),
     onShowDiff: (NodePath) -> Unit = {},
     onToggleApproval: (NodePath) -> Unit = {},
+    scope: NodePath? = null,
+    onClearScope: () -> Unit = {},
     forceSettings: ForceSettings = ForceSettings.DEFAULT,
     onForceSettingsChange: (ForceSettings) -> Unit = {},
     modifier: Modifier = Modifier,
@@ -119,12 +124,16 @@ fun DependencyGraphView(
     var nodeAttraction by remember(graph) { mutableStateOf(forceSettings.attraction) }
     var nodeRepulsion by remember(graph) { mutableStateOf(forceSettings.repulsion) }
     var showExternal by remember(graph) { mutableStateOf(viewState.showExternal) }
+    var showApprovalPercent by remember(graph) { mutableStateOf(viewState.showApprovalPercent) }
 
     // Persist any slider change so a readable layout survives sessions and rebuilds.
     fun persistForces() = onForceSettingsChange(ForceSettings(centerGravity, nodeAttraction, nodeRepulsion))
 
-    val visible = remember(graph, expanded, showExternal, changedSymbols, approvals) {
-        projectVisibleGraph(graph, expanded, showExternal, changedSymbols, approvals)
+    // Isolation filter (REQUIREMENTS: Scope to selected node): restrict the projected graph to
+    // the scoped node and its dependency closure, leaving the expansion frontier untouched.
+    val effectiveGraph = remember(graph, scope) { scope?.let { graph.scopedTo(it) } ?: graph }
+    val visible = remember(effectiveGraph, expanded, showExternal, changedSymbols, approvals) {
+        projectVisibleGraph(effectiveGraph, expanded, showExternal, changedSymbols, approvals)
     }
     val simulationConfig = remember(centerGravity, nodeAttraction, nodeRepulsion) {
         LivingGraphSimulationConfig(
@@ -252,6 +261,7 @@ fun DependencyGraphView(
             selected = selected,
             viewState = viewState,
             diagnosticNodes = diagnosticNodes,
+            showApprovalPercent = showApprovalPercent,
             onSelect = { selected = it; viewState.selected = it },
             onShowDiff = { id -> onShowDiff(id.path) },
             onToggleApproval = { id -> onToggleApproval(id.path) },
@@ -288,6 +298,14 @@ fun DependencyGraphView(
             horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            if (scope != null) {
+                ScopeFilterChip(label = scope.displayName(), onClear = onClearScope)
+            }
+            CheckboxRow(
+                text = "Approval %",
+                checked = showApprovalPercent,
+                onCheckedChange = { showApprovalPercent = it; viewState.showApprovalPercent = it },
+            )
             CheckboxRow(
                 text = "Show External nodes",
                 checked = showExternal,
@@ -325,6 +343,18 @@ fun DependencyGraphView(
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
             )
         }
+    }
+}
+
+/** Active isolation filter indicator (REQUIREMENTS: Scope to selected node) with a clear button. */
+@Composable
+private fun ScopeFilterChip(label: String, onClear: () -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text("Scoped to: $label", color = scopeChipColor)
+        OutlinedButton(onClick = onClear) { Text("Clear") }
     }
 }
 

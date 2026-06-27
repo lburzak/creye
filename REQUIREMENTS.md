@@ -23,6 +23,9 @@
 
 ## Node
 
+- MUST display an additional containing-module label when the node is a source set
+- Approval percent indicator (e.g. `56%`) MAY be displayed in the center of the node
+  - MUST be toggleable
 - MUST be circle with constant size
 - MUST expand on double-click
   - Children MUST be clustered
@@ -148,6 +151,14 @@ The key words "MUST", "MUST NOT", "SHOULD", "SHOULD NOT", "MAY", and "OPTIONAL" 
   - Collapse All
   - Expand down to Classes
   - Expand down to Symbols
+
+# IntelliJ Actions
+
+- MUST include "Approve selected node"
+  - Invocation MUST toggle approval of the currently selected graph node
+- MUST include "Scope to selected node"
+  - Invocation MUST filter the graph to the selected node and its dependencies (action, not checkbox), for isolation
+  - Invocation MUST show the active filter in the graph control row, with a "clear" button
 
 # Combined Diff View
 

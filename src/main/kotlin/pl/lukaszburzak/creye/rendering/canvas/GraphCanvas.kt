@@ -88,6 +88,8 @@ private object Palette {
     val label = Color(0xFFECEFF1)
     val labelShadow = Color(0xCC263238)
     val collapsedRing = Color(0xFFECEFF1)
+    val moduleLabel = Color(0xFFB0BEC5)
+    val percentLabel = Color(0xFFFFFFFF)
 }
 
 private fun edgeColor(edge: VisibleEdge): Color = when (edge.classifications.singleOrNull()) {
@@ -108,6 +110,7 @@ fun GraphCanvas(
     selected: GraphNodeId?,
     viewState: GraphViewState,
     diagnosticNodes: Set<GraphNodeId>,
+    showApprovalPercent: Boolean,
     onSelect: (GraphNodeId?) -> Unit,
     onShowDiff: (GraphNodeId.Structural) -> Unit,
     onToggleApproval: (GraphNodeId.Structural) -> Unit,
@@ -347,7 +350,7 @@ fun GraphCanvas(
                 scale(zoom, zoom, Offset.Zero) {
                     drawHierarchyEdges(visible, layout)
                     drawEdges(visible, layout)
-                    drawNodes(visible, layout, selected, diagnosticNodes, textMeasurer, labelMeasurements, zoom)
+                    drawNodes(visible, layout, selected, diagnosticNodes, showApprovalPercent, textMeasurer, labelMeasurements, zoom)
                 }
             }
         }
@@ -496,6 +499,7 @@ private fun DrawScope.drawNodes(
     layout: GraphLayout,
     selected: GraphNodeId?,
     diagnosticNodes: Set<GraphNodeId>,
+    showApprovalPercent: Boolean,
     textMeasurer: TextMeasurer,
     labelMeasurements: Map<GraphNodeId, TextLayoutResult>,
     zoom: Float,
@@ -515,6 +519,15 @@ private fun DrawScope.drawNodes(
         drawNodeShape(lastSegment, center, fillColor)
         drawApprovalRing(visibleNode, center, zoom)
         labelMeasurements[id]?.let { drawLabel(it, rect, Palette.label) }
+        // A source set's own label is just `main`/`test`; show its module too (REQUIREMENTS: Node).
+        if (lastSegment is NodeSegment.SourceSet) {
+            visibleNode.node.path.segments.filterIsInstance<NodeSegment.Module>().firstOrNull()?.let { module ->
+                drawModuleLabel(textMeasurer, rect, module.id)
+            }
+        }
+        if (showApprovalPercent) {
+            drawApprovalPercent(textMeasurer, visibleNode, center)
+        }
         if (selected == id) {
             drawNodeShapeStroke(
                 lastSegment,
@@ -653,6 +666,26 @@ private fun DrawScope.drawLabel(
     drawText(measured, color, Offset(x, y))
 }
 
+/** Containing-module label above a source-set node (REQUIREMENTS: Node). */
+private fun DrawScope.drawModuleLabel(textMeasurer: TextMeasurer, rect: LayoutRect, moduleId: String) {
+    val measured = textMeasurer.measure(moduleId, moduleLabelTextStyle)
+    val center = rect.center
+    val x = center.x - measured.size.width / 2f
+    val y = center.y - LayoutMetrics.NODE_RADIUS - measured.size.height - 3f
+    drawText(measured, Palette.labelShadow, Offset(x + 1f, y + 1f))
+    drawText(measured, Palette.moduleLabel, Offset(x, y))
+}
+
+/** Approval percent (e.g. `56%`) centered in the node when the indicator is toggled on. */
+private fun DrawScope.drawApprovalPercent(textMeasurer: TextMeasurer, visibleNode: VisibleNode, center: Offset) {
+    val summary = visibleNode.approval?.takeIf { it.totalLeaves > 0 } ?: return
+    val percent = summary.approvedLeaves * 100 / summary.totalLeaves
+    val measured = textMeasurer.measure("$percent%", percentTextStyle)
+    val origin = Offset(center.x - measured.size.width / 2f, center.y - measured.size.height / 2f)
+    drawText(measured, Palette.labelShadow, Offset(origin.x + 1f, origin.y + 1f))
+    drawText(measured, Palette.percentLabel, origin)
+}
+
 /** ADR-008 intrinsic internal-dependency badge on a collapsed node — never a self-loop. */
 private fun DrawScope.drawBadge(textMeasurer: TextMeasurer, rect: LayoutRect, count: Int) {
     val nodeCenter = rect.center.toOffset()
@@ -721,6 +754,8 @@ private fun DrawScope.drawCanvasMessage(textMeasurer: TextMeasurer, message: Str
 }
 
 private val labelTextStyle = TextStyle(fontSize = 11.sp)
+private val moduleLabelTextStyle = TextStyle(fontSize = 9.sp)
+private val percentTextStyle = TextStyle(fontSize = 9.sp)
 
 private const val MIN_ZOOM = 0.25f
 private const val MAX_ZOOM = 4f
