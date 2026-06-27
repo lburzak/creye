@@ -25,6 +25,7 @@ import kotlinx.coroutines.withContext
 import pl.lukaszburzak.creye.domain.approval.ApprovalState
 import pl.lukaszburzak.creye.domain.change.ChangedSymbols
 import pl.lukaszburzak.creye.domain.change.GraphAnalysisResult
+import pl.lukaszburzak.creye.domain.graph.GraphNodeId
 import pl.lukaszburzak.creye.domain.identity.NodePath
 import pl.lukaszburzak.creye.orchestration.GraphAnalysisService
 import pl.lukaszburzak.creye.rendering.AnalysisPhase
@@ -66,6 +67,15 @@ class GraphPanelController(
     private val _diffRequest = MutableStateFlow<DiffRequest?>(null)
     val diffRequest: StateFlow<DiffRequest?> = _diffRequest.asStateFlow()
 
+    /**
+     * Active isolation filter (REQUIREMENTS: IntelliJ Actions — Scope to selected node), or null
+     * when the full graph is shown. Held as a flow rather than in [viewState] because it is driven
+     * by IDE actions outside the Compose composition; the rendering surface observes it and the
+     * graph filters to the scoped node and its dependencies (ADR-026).
+     */
+    private val _scopeFilter = MutableStateFlow<NodePath?>(null)
+    val scopeFilter: StateFlow<NodePath?> = _scopeFilter.asStateFlow()
+
     private var analysis: Deferred<GraphAnalysisResult>? = null
     private val diffPresenter = NodeDiffPresenter(project)
 
@@ -100,6 +110,7 @@ class GraphPanelController(
         DependencyGraphSettings.getInstance(project).branch = branch
         // A different comparison branch is a different graph; view state must not carry over.
         viewState.reset()
+        _scopeFilter.value = null
         _state.update { it.copy(selectedBranch = branch, configurationDiagnostic = null) }
         runAnalysis(branch)
     }
@@ -195,6 +206,24 @@ class GraphPanelController(
     fun closeDiff() {
         updateDiffCaret(null)
         _diffRequest.value = null
+    }
+
+    /** The currently selected structural node, or null; used to enable/run the node-targeted actions. */
+    fun selectedNode(): NodePath? = (viewState.selected as? GraphNodeId.Structural)?.path
+
+    /** IDE action (REQUIREMENTS: IntelliJ Actions): toggles approval of the selected node. */
+    fun approveSelectedNode() {
+        selectedNode()?.let(::toggleApproval)
+    }
+
+    /** IDE action (REQUIREMENTS: IntelliJ Actions): isolates the graph to the selected node. */
+    fun scopeToSelectedNode() {
+        selectedNode()?.let { _scopeFilter.value = it }
+    }
+
+    /** Clears the isolation filter so the full graph is shown again. */
+    fun clearScope() {
+        _scopeFilter.value = null
     }
 
     private fun runAnalysis(branch: String) {

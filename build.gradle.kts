@@ -1,4 +1,6 @@
+import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
 import org.jetbrains.intellij.platform.gradle.TestFrameworkType
+import org.jetbrains.intellij.platform.gradle.tasks.VerifyPluginTask
 import org.jetbrains.kotlin.gradle.dsl.KotlinVersion
 
 plugins {
@@ -62,6 +64,12 @@ intellijPlatform {
         ideaVersion {
             sinceBuild = "252"
             untilBuild = provider { null }
+        }
+    }
+    pluginVerification {
+        failureLevel.set(listOf(VerifyPluginTask.FailureLevel.NOT_DYNAMIC))
+        ides {
+            create(IntelliJPlatformType.IntellijIdeaCommunity, "2025.2")
         }
     }
 }

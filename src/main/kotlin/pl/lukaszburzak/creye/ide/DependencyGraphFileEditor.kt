@@ -38,6 +38,7 @@ class DependencyGraphFileEditor(
 
     private val graphPanel: JComponent = JewelComposePanel {
         val state by controller.state.collectAsState()
+        val scope by controller.scopeFilter.collectAsState()
         GraphSurface(
             state = state,
             viewState = controller.viewState,
@@ -45,6 +46,8 @@ class DependencyGraphFileEditor(
             onRefresh = controller::refresh,
             onShowDiff = controller::showNodeDiff,
             onToggleApproval = controller::toggleApproval,
+            scope = scope,
+            onClearScope = controller::clearScope,
             forceSettings = controller.forceSettings(),
             onForceSettingsChange = controller::updateForceSettings,
         )

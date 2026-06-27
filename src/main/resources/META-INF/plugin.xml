@@ -34,6 +34,18 @@
                 description="Open the Kotlin symbol dependency graph for changes against a git branch">
             <add-to-group group-id="ToolsMenu" anchor="last"/>
         </action>
+        <action id="pl.lukaszburzak.creye.ApproveSelectedNode"
+                class="pl.lukaszburzak.creye.ide.ApproveSelectedNodeAction"
+                text="Approve Selected Node"
+                description="Toggle approval of the node selected in the dependency graph">
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+        </action>
+        <action id="pl.lukaszburzak.creye.ScopeToSelectedNode"
+                class="pl.lukaszburzak.creye.ide.ScopeToSelectedNodeAction"
+                text="Scope to Selected Node"
+                description="Filter the dependency graph to the selected node and its dependencies">
+            <add-to-group group-id="ToolsMenu" anchor="last"/>
+        </action>
         <action id="pl.lukaszburzak.creye.ToggleApprovalAtCaret"
                 class="pl.lukaszburzak.creye.ide.ToggleApprovalAtCaretAction"
                 text="Toggle Approval of Symbol with Cursor"

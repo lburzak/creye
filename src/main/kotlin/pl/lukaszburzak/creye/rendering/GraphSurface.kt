@@ -43,6 +43,8 @@ fun GraphSurface(
     onRefresh: () -> Unit,
     onShowDiff: (NodePath) -> Unit,
     onToggleApproval: (NodePath) -> Unit,
+    scope: NodePath? = null,
+    onClearScope: () -> Unit = {},
     forceSettings: ForceSettings,
     onForceSettingsChange: (ForceSettings) -> Unit,
 ) {
@@ -70,6 +72,8 @@ fun GraphSurface(
                     caretPath = state.diffCaretPath,
                     onShowDiff = onShowDiff,
                     onToggleApproval = onToggleApproval,
+                    scope = scope,
+                    onClearScope = onClearScope,
                     forceSettings = forceSettings,
                     onForceSettingsChange = onForceSettingsChange,
                     modifier = Modifier.weight(1f),
